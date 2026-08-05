@@ -54,6 +54,7 @@ function hasOrderPrefix(name) {
 }
 
 const AUDIO_EXTS = new Set(['mp3', 'flac', 'ogg', 'wav', 'm4a', 'aac'])
+const SYNC_PROFILES_KEY = 'snowsky-transfer-sync-profiles'
 
 // ─── Alpine app ──────────────────────────────────────────────────────────────
 
@@ -77,6 +78,9 @@ Alpine.data('app', () => ({
   folderContents: { directories: [], files: [] },
   folderHistory:  [],        // stack of previous folder paths
   transferDestination: '',
+  pendingTransferDestination: null,
+  pendingTransferRefreshPath: null,
+  pendingTransferDestination: null,
   deviceSearch:   '',
   deviceFormat:   'all',
   isLoadingSearchLibrary: false,
@@ -105,6 +109,12 @@ Alpine.data('app', () => ({
   transferCloseTimer: null,
   syncSummary: null,
   syncModal: false,
+  syncProfiles: [],
+  activeSyncProfileId: null,
+  isScanningSyncProfile: false,
+  profileModal: false,
+  profileName: '',
+  profileFolder: '',
 
   // ── Device tab
   activeDeviceTab: 'tracks',
@@ -138,6 +148,12 @@ Alpine.data('app', () => ({
 
   // ─────────────────────────────────────────────────────────────────────────
   async init() {
+    try {
+      this.syncProfiles = JSON.parse(localStorage.getItem(SYNC_PROFILES_KEY) || '[]')
+    } catch (_) {
+      this.syncProfiles = []
+    }
+
     // Listen for transfer progress from Rust
     await listen('transfer:start', (e) => {
       const { id, filename, index, total } = e.payload
@@ -223,6 +239,8 @@ Alpine.data('app', () => ({
         this.folderHistory = []
         await this.loadFolderContents(path, '')
         this.loadDiskUsage(path)
+        // Profiles are always started manually by the user after connecting.
+        this.activeSyncProfileId = null
       }
     } catch (e) {
       console.error('select_mount_device error:', e)
@@ -556,11 +574,139 @@ Alpine.data('app', () => ({
         if (existing) await invoke('delete_mount_file', { path: existing.path })
       }
       this.transferDestination = ''
-      await this.doMountTransfer(candidates)
+      await this.doMountTransfer(candidates, '')
     } catch (e) {
       console.error('syncFolder error:', e)
       window.alert(`Could not sync the folder: ${e}`)
     }
+  },
+
+  persistSyncProfiles() {
+    localStorage.setItem(SYNC_PROFILES_KEY, JSON.stringify(this.syncProfiles))
+  },
+
+  async chooseSyncProfileFolder() {
+    const folder = await open({ directory: true, multiple: false })
+    if (folder && !Array.isArray(folder)) this.profileFolder = folder
+  },
+
+  openProfileModal() {
+    this.profileName = ''
+    this.profileFolder = ''
+    this.profileModal = true
+  },
+
+  async createSyncProfile() {
+    if (!this.profileFolder) await this.chooseSyncProfileFolder()
+    if (!this.profileFolder) return
+    const fallback = this.profileFolder.split('/').filter(Boolean).pop() || 'Music library'
+    const name = this.profileName.trim() || fallback
+    const profile = {
+      id: `profile-${Date.now()}`,
+      name,
+      folder: this.profileFolder,
+      excluded: [],
+      updatedAt: Date.now(),
+    }
+    this.syncProfiles = [...this.syncProfiles, profile]
+    this.activeSyncProfileId = profile.id
+    this.persistSyncProfiles()
+    this.profileModal = false
+    await this.scanSyncProfile(profile)
+  },
+
+  async scanSavedProfile(id = this.activeSyncProfileId) {
+    const profile = this.syncProfiles.find(item => item.id === id)
+    if (!profile || !this.selectedMount || this.isTransferring) return
+    this.activeSyncProfileId = profile.id
+    await this.scanSyncProfile(profile)
+  },
+
+  async selectSavedProfile() {
+    this.clearLocalFiles()
+    await this.scanSavedProfile()
+  },
+
+  async scanSyncProfile(profile) {
+    this.isScanningSyncProfile = true
+    try {
+      const sourceFiles = await invoke('expand_audio_path', { path: profile.folder })
+      const deviceFiles = await invoke('get_mount_tracks', { mountPath: this.selectedMount.mount_path })
+      const rootName = profile.folder.split('/').filter(Boolean).pop() || 'Music'
+      const deviceByPath = new Map(deviceFiles.map(file => [syncPathKey(file.id), file]))
+      const files = []
+      const selected = new Set()
+      let synced = 0
+      let pending = 0
+      let excluded = 0
+
+      for (const sourcePath of sourceFiles) {
+        const ext = extOf(sourcePath)
+        if (!AUDIO_EXTS.has(ext)) continue
+        const relative = sourcePath.slice(profile.folder.length).replace(/^\/+/, '')
+        const subPath = `${rootName}/${relative}`
+        const existing = deviceByPath.get(syncPathKey(subPath))
+        const isExcluded = profile.excluded.includes(sourcePath)
+        const sourceSize = Number(await invoke('get_local_file_size', { path: sourcePath }))
+        const status = isExcluded ? 'excluded' : !existing ? 'new' : Number(existing.file_size) === sourceSize ? 'synced' : 'changed'
+        if (status === 'excluded') excluded++
+        else if (status === 'synced') synced++
+        else {
+          pending++
+          selected.add(sourcePath)
+        }
+        files.push({
+          path: sourcePath,
+          name: sourcePath.split('/').pop(),
+          ext,
+          subPath,
+          meta: null,
+          size: sourceSize,
+          loading: true,
+          syncStatus: status,
+          syncOrder: trackNumberOf({ name: sourcePath.split('/').pop(), meta: null }),
+        })
+      }
+
+      await Promise.all(files.map(async file => {
+        try { file.meta = await invoke('get_local_metadata', { path: file.path }) } catch (_) { file.meta = null }
+        file.syncOrder = trackNumberOf(file)
+        file.loading = false
+      }))
+      this.localFiles = files
+      this.selectedLocal = selected
+      this.syncSummary = { folder: rootName, skipped: synced, pending, excluded }
+      profile.updatedAt = Date.now()
+      this.persistSyncProfiles()
+    } catch (e) {
+      console.error('scanSyncProfile error:', e)
+      window.alert(`Could not scan the sync profile: ${e}`)
+    } finally {
+      this.isScanningSyncProfile = false
+    }
+  },
+
+  deleteSyncProfile(id) {
+    this.syncProfiles = this.syncProfiles.filter(profile => profile.id !== id)
+    if (this.activeSyncProfileId === id) {
+      this.activeSyncProfileId = null
+      this.clearLocalFiles()
+    }
+    this.persistSyncProfiles()
+  },
+
+  async syncSavedProfile() {
+    if (!this.selectedMount || !this.selectedLocal.size || this.isTransferring) return
+    const currentFolder = this.folderPath
+    const deviceFiles = await invoke('get_mount_tracks', { mountPath: this.selectedMount.mount_path })
+    const deviceByPath = new Map(deviceFiles.map(file => [syncPathKey(file.id), file]))
+    for (const file of this.selectedLocalFiles) {
+      const existing = deviceByPath.get(syncPathKey(file.subPath))
+      if (existing) await invoke('delete_mount_file', { path: existing.path })
+    }
+    await this.startTransfer('', currentFolder)
+    const profile = this.syncProfiles.find(item => item.id === this.activeSyncProfileId)
+    if (profile) await this.scanSyncProfile(profile)
   },
 
   async addFilePaths(paths) {
@@ -614,6 +760,12 @@ Alpine.data('app', () => ({
     if (this.selectedLocal.has(path)) this.selectedLocal.delete(path)
     else this.selectedLocal.add(path)
     this.selectedLocal = new Set(this.selectedLocal)
+    const profile = this.syncProfiles.find(item => item.id === this.activeSyncProfileId)
+    if (profile) {
+      if (this.selectedLocal.has(path)) profile.excluded = profile.excluded.filter(item => item !== path)
+      else if (!profile.excluded.includes(path)) profile.excluded.push(path)
+      this.persistSyncProfiles()
+    }
   },
 
   startLocalDrag(path) {
@@ -779,11 +931,13 @@ Alpine.data('app', () => ({
   },
 
   // ─── Transfer ────────────────────────────────────────────────────────────
-  async startTransfer() {
+  async startTransfer(destinationOverride = null, refreshOverride = null) {
     if (!this.selectedLocal.size) return
     if (!this.device && !this.selectedMount) return
 
     const files = this.selectedLocalFiles
+    this.pendingTransferDestination = destinationOverride
+    this.pendingTransferRefreshPath = refreshOverride
     if (files.some(file => file.loading)) {
       window.alert('Wait until the track metadata has loaded before transferring.')
       return
@@ -818,7 +972,9 @@ Alpine.data('app', () => ({
 
     // If using a mount device, copy files directly
     if (this.selectedMount) {
-      await this.doMountTransfer(ordered)
+      await this.doMountTransfer(ordered, destinationOverride, refreshOverride)
+      this.pendingTransferDestination = null
+      this.pendingTransferRefreshPath = null
       return
     }
 
@@ -867,7 +1023,10 @@ Alpine.data('app', () => ({
     }
 
     if (this.selectedMount) {
-      await this.doMountTransfer(mountFiles)
+      await this.doMountTransfer(mountFiles, this.pendingTransferDestination, this.pendingTransferRefreshPath)
+      this.pendingTransferDestination = null
+      this.pendingTransferRefreshPath = null
+      this.pendingTransferDestination = null
     } else {
       await this.doTransfer(sendRequests)
     }
@@ -909,14 +1068,17 @@ Alpine.data('app', () => ({
     }
   },
 
-  async doMountTransfer(rawFiles) {
+  async doMountTransfer(rawFiles, destinationOverride = null, refreshOverride = null) {
     if (!this.selectedMount) return
     this.isTransferring = true
     this.cancelTransferRequested = false
     this.transfers      = {}
     this.transferNotice = null
     clearTimeout(this.transferCloseTimer)
-    const destination   = this.transferDestination || (this.viewMode === 'folder' ? this.folderPath : '')
+    const destination   = destinationOverride !== null
+      ? destinationOverride
+      : (this.transferDestination || (this.viewMode === 'folder' ? this.folderPath : ''))
+    const refreshPath = refreshOverride !== null ? refreshOverride : destination
     const dest          = this.selectedMount.mount_path + (destination ? '/' + destination : '')
 
     // Preserve the order chosen in the local file queue.
@@ -951,7 +1113,8 @@ Alpine.data('app', () => ({
 
       // Preserve an existing order prefix instead of duplicating it.
       if (!hasOrderPrefix(targetName)) {
-        targetName = String(i + 1).padStart(2, '0') + ' - ' + targetName
+        const order = file.syncOrder || i + 1
+        targetName = String(order).padStart(2, '0') + ' - ' + targetName
       }
 
       this.transfers[id] = { filename: targetName, percent: 0, status: 'transferring', index: i, total: files.length, sourceFile: file }
@@ -979,7 +1142,7 @@ Alpine.data('app', () => ({
     // Refresh view after copy
     await this.invalidateMountSearchCache()
     if (this.viewMode === 'folder') {
-      await this.loadFolderContents(this.selectedMount.mount_path, destination)
+      await this.loadFolderContents(this.selectedMount.mount_path, refreshPath)
     } else {
       await this.loadMountTracks(this.selectedMount.mount_path)
     }

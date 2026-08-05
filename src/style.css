@@ -50,13 +50,21 @@ button.bg-violet-600:hover { background: var(--studio-cyan) !important; }
 .studio-pane {
   background: var(--studio-surface) !important;
   border-color: var(--studio-border) !important;
+  min-width: 0;
 }
 .studio-pane > div:first-child,
 .studio-pane > section:first-child {
   background: rgba(32,36,40,.72);
   border-color: var(--studio-border) !important;
 }
-.studio-pane > div:first-child { min-height: 3.25rem; }
+.studio-pane > div:first-child {
+  min-height: 3.25rem;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.studio-pane > div:first-child > * { flex-shrink: 0; }
+.studio-pane .flex-1.min-w-0 { min-width: 0; }
 .studio-pane > div:first-child > span:first-child,
 .studio-pane > div:first-child > [class~="font-semibold"] { color: var(--studio-text) !important; }
 .studio-pane [class~="border-gray-200"],

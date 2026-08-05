@@ -148,15 +148,47 @@
           >
             + Add files
           </button>
-          <button
-            x-show="selectedMount"
-            @click="syncFolder()"
-            :disabled="isTransferring"
+           <button
+             x-show="selectedMount"
+             @click="syncFolder()"
+             :disabled="isTransferring || isScanningSyncProfile"
             class="px-2.5 py-1 rounded-md text-xs font-medium bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 hover:bg-violet-200 dark:hover:bg-violet-900/50 transition-colors disabled:opacity-50"
             title="Sync a local music folder"
-          >
-            Sync folder
-          </button>
+           >
+             Sync folder
+           </button>
+           <button
+             x-show="selectedMount"
+             @click="openProfileModal()"
+             :disabled="isTransferring || isScanningSyncProfile"
+             class="px-2.5 py-1 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+             title="Create a saved sync profile"
+           >
+             + Saved sync
+           </button>
+           <select
+             x-show="selectedMount && syncProfiles.length > 0"
+             x-model="activeSyncProfileId"
+             @change="selectSavedProfile()"
+             :disabled="isTransferring || isScanningSyncProfile"
+             class="max-w-36 px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs focus:outline-none"
+             aria-label="Saved sync profile"
+           >
+             <option value="">Saved syncs</option>
+             <template x-for="profile in syncProfiles" :key="profile.id">
+               <option :value="profile.id" x-text="profile.name"></option>
+             </template>
+           </select>
+           <button
+             x-show="selectedMount && activeSyncProfileId"
+             @click="deleteSyncProfile(activeSyncProfileId)"
+             :disabled="isTransferring || isScanningSyncProfile"
+             class="w-7 h-7 rounded flex items-center justify-center text-gray-400 hover:text-red-400 transition-colors"
+             title="Delete saved sync profile"
+             aria-label="Delete saved sync profile"
+           >
+             ×
+           </button>
           <button
             @click="selectAllLocal()"
             x-show="localFiles.length > 0"
@@ -176,13 +208,30 @@
         </div>
 
         <!-- Drop zone / file list -->
-        <div
-          class="flex-1 overflow-y-auto transition-all"
-          :class="isDragging ? 'drop-target-active' : ''"
-        >
-          <!-- Empty state -->
-          <div
-            x-show="localFiles.length === 0"
+         <div
+           class="flex-1 overflow-y-auto transition-all"
+           :class="isDragging ? 'drop-target-active' : ''"
+         >
+           <div
+             x-show="isScanningSyncProfile"
+             class="flex flex-col items-center justify-center h-full gap-3 text-gray-400 dark:text-gray-600"
+           >
+             <svg
+               class="w-7 h-7 animate-spin text-cyan-400"
+               viewBox="0 0 24 24"
+               fill="none"
+               stroke="currentColor"
+               stroke-width="2"
+             >
+               <circle cx="12" cy="12" r="9" stroke-opacity=".25" />
+               <path d="M21 12a9 9 0 0 0-9-9" stroke-linecap="round" />
+             </svg>
+             <p class="text-sm font-medium text-gray-300">Scanning music folder…</p>
+             <p class="text-xs">Reading tracks and comparing the device library</p>
+           </div>
+           <!-- Empty state -->
+           <div
+             x-show="localFiles.length === 0 && !isScanningSyncProfile"
             class="flex flex-col items-center justify-center h-full gap-3 text-gray-400 dark:text-gray-600 pointer-events-none"
           >
             <svg
@@ -203,7 +252,7 @@
           </div>
 
           <!-- File rows -->
-          <div x-show="localFiles.length > 0">
+           <div x-show="localFiles.length > 0 && !isScanningSyncProfile">
             <template x-for="file in localFiles" :key="file.path">
               <div
                 @click="toggleLocalFile(file.path)"
@@ -352,12 +401,17 @@
         </div>
 
         <!-- Transfer footer -->
-        <div
-          x-show="selectedLocal.size > 0"
+         <div
+           x-show="selectedLocal.size > 0 || activeSyncProfileId"
           class="flex items-center gap-3 px-3 py-2 border-t border-gray-200 dark:border-gray-800 shrink-0 bg-white dark:bg-gray-950"
         >
           <span class="text-xs text-gray-500 leading-4">
-            <span x-text="selectedLocal.size"></span> files selected
+             <template x-if="activeSyncProfileId">
+               <span><strong class="text-cyan-400" x-text="syncSummary?.pending || selectedLocal.size"></strong> files need syncing</span>
+             </template>
+             <template x-if="!activeSyncProfileId">
+               <span><span x-text="selectedLocal.size"></span> files selected</span>
+             </template>
             <span class="text-gray-400">(</span
             ><span
               x-show="!selectedLocalSizesLoading"
@@ -381,10 +435,18 @@
               class="block font-medium text-gray-400"
               >checking device space...</span
             >
-          </span>
-          <span class="flex-1"></span>
-          <button
-            @click="startTransfer()"
+           </span>
+           <span class="flex-1"></span>
+           <button
+             x-show="activeSyncProfileId"
+             @click="scanSavedProfile()"
+             :disabled="isTransferring || isScanningSyncProfile"
+             class="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
+           >
+             Rescan
+           </button>
+           <button
+             @click="activeSyncProfileId ? syncSavedProfile() : startTransfer()"
             :disabled="(!device && !selectedMount) || isTransferring || (selectedMount && (selectedLocalSizesLoading || selectedLocalCapacityUnknown || selectedLocalOverCapacity))"
             class="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold bg-violet-600 hover:bg-violet-700 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
@@ -401,7 +463,7 @@
                 stroke-linejoin="round"
               />
             </svg>
-            Transfer to device
+             <span x-text="activeSyncProfileId ? 'Sync selected' : 'Transfer to device'"></span>
           </button>
         </div>
       </section>
@@ -1309,6 +1371,67 @@
             class="px-4 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium transition-colors"
           >
             OK
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Saved sync profile -->
+    <div
+      x-show="profileModal"
+      x-cloak
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      @keydown.escape.window="profileModal = false"
+    >
+      <div
+        @click.stop
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="profile-title"
+        class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-6 border border-gray-200 dark:border-gray-700"
+      >
+        <h2 id="profile-title" class="font-semibold text-base">Create saved sync</h2>
+        <p class="text-xs text-gray-500 mt-1 mb-5">
+          Remember a music folder and its selection for future device updates.
+        </p>
+        <label class="block text-xs font-medium text-gray-500 mb-1">Profile name</label>
+        <input
+          x-model="profileName"
+          type="text"
+          placeholder="My Echo library"
+          class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm mb-4 focus:outline-none"
+        />
+        <label class="block text-xs font-medium text-gray-500 mb-1">Music folder</label>
+        <p class="text-xs text-gray-500 mb-2">
+          Choose the folder containing your music. Individual audio files cannot be selected here.
+        </p>
+        <div class="flex gap-2">
+          <input
+            x-model="profileFolder"
+            readonly
+            placeholder="Choose a folder"
+            class="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:outline-none"
+          />
+          <button
+            @click="chooseSyncProfileFolder()"
+            class="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-xs font-medium transition-colors"
+          >
+            Browse
+          </button>
+        </div>
+        <div class="flex gap-3 mt-6 justify-end">
+          <button
+            @click="profileModal = false"
+            class="px-4 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            @click="createSyncProfile()"
+            :disabled="!profileFolder"
+            class="px-4 py-1.5 text-sm rounded-lg bg-violet-600 hover:bg-violet-700 text-white font-medium transition-colors disabled:opacity-40"
+          >
+            Create and scan
           </button>
         </div>
       </div>
