@@ -287,7 +287,7 @@ Alpine.data('app', () => ({
   async deleteFolder(relPath) {
     if (!this.selectedMount) return
     const name = relPath.split('/').pop() || relPath
-    if (!window.confirm(`Ta bort mappen "${name}" och allt innehåll?`)) return
+    if (!window.confirm(`Delete folder "${name}" and all its contents?`)) return
     const fullPath = this.selectedMount.mount_path + '/' + relPath
     try {
       await invoke('delete_mount_folder', { path: fullPath })
@@ -338,14 +338,14 @@ Alpine.data('app', () => ({
 
   async safeEjectMount() {
     if (!this.selectedMount || this.isTransferring) return
-    if (!window.confirm('Synkronisera skrivningar och koppla från enheten?')) return
+    if (!window.confirm('Sync writes and safely disconnect the device?')) return
     try {
       await invoke('sync_mount', { mountPath: this.selectedMount.mount_path })
       await this.disconnectMount()
-      this.transferNotice = 'Enheten är säkert frånkopplad'
+      this.transferNotice = 'Device safely disconnected'
     } catch (e) {
       console.error('sync_mount error:', e)
-      window.alert(`Kunde inte koppla från enheten: ${e}`)
+      window.alert(`Could not disconnect the device: ${e}`)
     }
   },
 
@@ -390,7 +390,7 @@ Alpine.data('app', () => ({
   async deleteSelectedDeviceTracks() {
     if (!this.selectedDevice.size) return
     const ids = [...this.selectedDevice]
-    if (!window.confirm(`Ta bort ${ids.length} valda ${ids.length === 1 ? 'fil' : 'filer'}?`)) return
+    if (!window.confirm(`Delete ${ids.length} selected ${ids.length === 1 ? 'file' : 'files'}?`)) return
 
     if (this.selectedMount) {
       // Mount device: delete files by path
@@ -484,7 +484,7 @@ Alpine.data('app', () => ({
         this.syncModal = true
         return
       }
-      if (!window.confirm(`Synkronisera ${candidates.length} nya eller ändrade filer till mappen "${rootName}"?`)) return
+    if (!window.confirm(`Sync ${candidates.length} new or changed files to the folder "${rootName}"?`)) return
 
       for (const file of candidates) {
         const relative = file.subPath
@@ -495,7 +495,7 @@ Alpine.data('app', () => ({
       await this.doMountTransfer(candidates)
     } catch (e) {
       console.error('syncFolder error:', e)
-      window.alert(`Kunde inte synkronisera mappen: ${e}`)
+      window.alert(`Could not sync the folder: ${e}`)
     }
   },
 
@@ -627,7 +627,7 @@ Alpine.data('app', () => ({
       await this.renameDeviceOrder(ordered)
     } catch (e) {
       console.error('moveDeviceTrack error:', e)
-      window.alert(`Kunde inte ändra ordningen: ${e}`)
+      window.alert(`Could not change the order: ${e}`)
     }
   },
 
@@ -663,7 +663,7 @@ Alpine.data('app', () => ({
       await this.renameDeviceOrder(files)
     } catch (e) {
       console.error('device reorder error:', e)
-      window.alert(`Kunde inte ändra ordningen: ${e}`)
+      window.alert(`Could not change the order: ${e}`)
       if (this.selectedMount) {
         if (this.viewMode === 'folder') await this.loadFolderContents(this.selectedMount.mount_path, this.folderPath)
         else await this.loadMountTracks(this.selectedMount.mount_path)
@@ -696,7 +696,7 @@ Alpine.data('app', () => ({
 
     const files = this.selectedLocalFiles
     if (files.some(file => file.loading)) {
-      window.alert('Vänta tills låtarnas metadata har lästs in innan du överför.')
+      window.alert('Wait until the track metadata has loaded before transferring.')
       return
     }
 
@@ -705,7 +705,7 @@ Alpine.data('app', () => ({
       const required = sizes.reduce((sum, size) => sum + Number(size), 0)
       const disk = await invoke('get_disk_usage', { mountPath: this.selectedMount.mount_path })
       if (required > Number(disk.free_bytes)) {
-        window.alert(`Inte tillräckligt med utrymme. Behöver ${fmtBytes(required)}, men bara ${fmtBytes(Number(disk.free_bytes))} är ledigt.`)
+        window.alert(`Not enough space. Required: ${fmtBytes(required)}, available: ${fmtBytes(Number(disk.free_bytes))}.`)
         return
       }
     }
@@ -906,10 +906,10 @@ Alpine.data('app', () => ({
     const cancelled = this.cancelTransferRequested
 
     this.transferNotice = cancelled
-      ? `Överföring avbruten (${done} klara)`
+      ? `Transfer cancelled (${done} completed)`
       : errors
-      ? `Överföring klar med ${errors} fel (${done} lyckades)`
-      : `${done} ${done === 1 ? 'fil överförd' : 'filer överförda'} utan problem`
+      ? `Transfer completed with ${errors} error(s) (${done} succeeded)`
+      : `${done} ${done === 1 ? 'file' : 'files'} transferred successfully`
 
     this.transferCloseTimer = setTimeout(() => {
       if (!this.isTransferring) this.transfers = {}
@@ -1030,7 +1030,7 @@ Alpine.data('app', () => ({
   },
 
   async deletePlaylist(id) {
-    if (!window.confirm('Ta bort spellistan? Låtarna på enheten påverkas inte.')) return
+    if (!window.confirm('Delete this playlist? Files on the device will not be affected.')) return
     try {
       await invoke('delete_playlist', { playlistId: id })
       await this.loadPlaylists()

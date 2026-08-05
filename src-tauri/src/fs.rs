@@ -264,12 +264,44 @@ pub fn sync_mount(mount_path: &str) -> Result<(), AppError> {
     if !sync_status.success() {
         return Err(AppError::Task("Filesystem sync failed".into()));
     }
-    let unmount_status = std::process::Command::new("umount")
-        .arg(mount_path)
+
+    // Use udisks so the device is powered down, not merely unmounted.
+    let source = std::process::Command::new("findmnt")
+        .args(["-no", "SOURCE", "--target", mount_path])
+        .output()?;
+    if !source.status.success() {
+        return Err(AppError::Task("Could not identify the mounted device.".into()));
+    }
+    let source = String::from_utf8_lossy(&source.stdout).trim().to_string();
+    if !source.starts_with("/dev/") {
+        return Err(AppError::Task("The mount is not backed by a block device.".into()));
+    }
+
+    let unmount_status = std::process::Command::new("udisksctl")
+        .args(["unmount", "-b", &source])
         .status()?;
     if !unmount_status.success() {
         return Err(AppError::Task(
             "Could not unmount the device. Close files using it and try again.".into(),
+        ));
+    }
+
+    let parent = std::process::Command::new("lsblk")
+        .args(["-no", "PKNAME", &source])
+        .output()?;
+    let parent_name = String::from_utf8_lossy(&parent.stdout).trim().to_string();
+    let block_device = if parent.status.success() && !parent_name.is_empty() {
+        format!("/dev/{parent_name}")
+    } else {
+        source
+    };
+
+    let power_off_status = std::process::Command::new("udisksctl")
+        .args(["power-off", "-b", &block_device])
+        .status()?;
+    if !power_off_status.success() {
+        return Err(AppError::Task(
+            "The device was unmounted but could not be powered off.".into(),
         ));
     }
     Ok(())

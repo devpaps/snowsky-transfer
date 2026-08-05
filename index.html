@@ -54,8 +54,8 @@
             <button
               @click="disconnectDevice()"
               class="text-xs text-gray-400 hover:text-red-500 transition-colors px-1"
-              title="Koppla ifrån"
-              aria-label="Koppla ifrån enhet"
+              title="Disconnect"
+              aria-label="Disconnect device"
             >
               ✕
             </button>
@@ -71,7 +71,7 @@
             <span class="font-medium" x-text="selectedMount.name"></span>
             <span
               class="text-xs text-gray-400"
-              x-text="`(${selectedMount.track_count} filer)`"
+              x-text="`(${selectedMount.track_count} files)`"
             ></span>
             <template x-if="selectedMountDisk">
               <span
@@ -82,18 +82,18 @@
             <button
               @click="disconnectMount()"
               class="text-xs text-gray-400 hover:text-red-500 transition-colors px-1"
-              title="Koppla ifrån"
-              aria-label="Koppla ifrån enhet"
+              title="Disconnect"
+              aria-label="Disconnect device"
             >
               ✕
             </button>
             <button
               @click="safeEjectMount()"
               :disabled="isTransferring"
-              class="px-2 py-1 rounded-md text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
-              title="Säker koppla från"
+              class="px-2 hover:cursor-pointer py-1 rounded-md text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
+              title="Safely disconnect"
             >
-              Mata ut
+              Eject
             </button>
           </div>
         </template>
@@ -117,7 +117,7 @@
             </svg>
           </template>
           <span
-            x-text="device || selectedMount ? 'Skanna igen' : (isConnecting || isScanningMounts ? 'Söker…' : 'Anslut enhet')"
+            x-text="device || selectedMount ? 'Scan again' : (isConnecting || isScanningMounts ? 'Searching…' : 'Connect device')"
           ></span>
         </button>
       </div>
@@ -137,23 +137,23 @@
         >
           <span
             class="font-semibold text-xs uppercase tracking-widest text-gray-400"
-            >Lokala filer</span
+            >Local files</span
           >
           <span class="flex-1"></span>
           <button
             @click="pickFiles()"
             class="hover:cursor-pointer px-2.5 py-1 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
           >
-            + Lägg till
+            + Add files
           </button>
           <button
             x-show="selectedMount"
             @click="syncFolder()"
             :disabled="isTransferring"
             class="px-2.5 py-1 rounded-md text-xs font-medium bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 hover:bg-violet-200 dark:hover:bg-violet-900/50 transition-colors disabled:opacity-50"
-            title="Synkronisera en lokal musikmapp"
+            title="Sync a local music folder"
           >
-            Synka mapp
+            Sync folder
           </button>
           <button
             @click="selectAllLocal()"
@@ -161,7 +161,7 @@
             class="px-2.5 py-1 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
           >
             <span
-              x-text="selectedLocal.size === localFiles.length ? 'Avmarkera allt' : 'Välj alla'"
+              x-text="selectedLocal.size === localFiles.length ? 'Deselect all' : 'Select all'"
             ></span>
           </button>
           <button
@@ -169,7 +169,7 @@
             x-show="localFiles.length > 0"
             class="px-2.5 py-1 rounded-md text-xs font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
           >
-            Rensa
+            Clear
           </button>
         </div>
 
@@ -196,7 +196,7 @@
                 d="M9 13h6m-3-3v6m5 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z"
               />
             </svg>
-            <p class="text-sm font-medium">Dra & släpp ljudfiler hit</p>
+            <p class="text-sm font-medium">Drag and drop audio files here</p>
             <p class="text-xs">MP3 · FLAC · OGG · WAV · M4A · AAC</p>
           </div>
 
@@ -214,7 +214,7 @@
                 <span
                   class="text-gray-300 dark:text-gray-600 text-xs shrink-0"
                   @pointerdown.stop.prevent="startLocalPointerDrag(file.path)"
-                  title="Dra för att ändra ordning"
+                  title="Drag to reorder"
                   >⋮</span
                 >
                 <!-- Checkbox -->
@@ -294,7 +294,7 @@
                   <button
                     @click="togglePreview(file.path)"
                     class="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-violet-500 transition-colors"
-                    :title="previewPath === file.path && isPlaying ? 'Stoppa' : 'Förhandsgranska'"
+                    :title="previewPath === file.path && isPlaying ? 'Stop' : 'Preview'"
                   >
                     <svg
                       x-show="!(previewPath === file.path && isPlaying)"
@@ -318,7 +318,7 @@
                   <button
                     @click="openMetaEditor(file)"
                     class="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-violet-500 transition-colors"
-                    title="Redigera metadata"
+                    title="Edit metadata"
                   >
                     <svg
                       class="w-3.5 h-3.5"
@@ -339,7 +339,7 @@
                   <button
                     @click="removeLocalFile(file.path)"
                     class="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors"
-                    title="Ta bort från listan"
+                    title="Remove from list"
                   >
                     ✕
                   </button>
@@ -355,7 +355,7 @@
           class="flex items-center gap-3 px-3 py-2 border-t border-gray-200 dark:border-gray-800 shrink-0 bg-white dark:bg-gray-950"
         >
           <span class="text-xs text-gray-500">
-            <span x-text="selectedLocal.size"></span> filer valda
+            <span x-text="selectedLocal.size"></span> files selected
           </span>
           <span class="flex-1"></span>
           <button
@@ -376,7 +376,7 @@
                 stroke-linejoin="round"
               />
             </svg>
-            Överför till enhet
+            Transfer to device
           </button>
         </div>
       </section>
@@ -389,13 +389,13 @@
         >
           <button
             @click="activeDeviceTab = 'tracks'"
-            class="px-4 py-2 text-xs font-medium border-b-2 transition-colors hover:cursor-pointer"
+            class="px-4 py-3 text-xs font-medium border-b-2 transition-colors hover:cursor-pointer"
             :class="activeDeviceTab === 'tracks'
           ? 'border-violet-600 text-violet-600 dark:text-violet-400'
           : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'"
           >
             <span
-              x-text="selectedMount && viewMode === 'folder' ? 'Bläddra' : 'Låtar'"
+              x-text="selectedMount && viewMode === 'folder' ? 'Browse' : 'Tracks'"
             ></span>
             <span
               x-text="`(${deviceTracks.length > 0 ? deviceTracks.length : folderContents.files.length + folderContents.directories.length})`"
@@ -431,7 +431,7 @@
                   :class="viewMode === 'folder'
                 ? 'bg-violet-600 text-white'
                 : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'"
-                  title="Mappvy"
+                  title="Folder view"
                 >
                   📁
                 </button>
@@ -441,7 +441,7 @@
                   :class="viewMode === 'flat'
                 ? 'bg-violet-600 text-white'
                 : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'"
-                  title="Listvy"
+                  title="List view"
                 >
                   ☰
                 </button>
@@ -452,22 +452,22 @@
               x-show="selectedDevice.size > 0 && !selectedMount"
               @click="openNewPlaylist()"
               class="px-2.5 py-1 text-xs rounded-md bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-              title="Skapa spellista av valda"
+              title="Create playlist from selected tracks"
             >
-              + Spellista
+              + Playlist
             </button>
             <button
               x-show="selectedDevice.size > 0"
               @click="deleteSelectedDeviceTracks()"
               class="px-2.5 py-1 text-xs rounded-md text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
             >
-              Ta bort
+              Delete
             </button>
             <button
               @click="selectedMount && viewMode === 'folder' ? loadFolderContents(selectedMount.mount_path, folderPath) : (selectedMount ? loadMountTracks(selectedMount.mount_path) : loadDeviceTracks())"
               class="w-7 h-7 rounded flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
-              title="Uppdatera"
-              aria-label="Uppdatera"
+              title="Refresh"
+              aria-label="Refresh"
             >
               <svg
                 class="w-3.5 h-3.5"
@@ -512,7 +512,7 @@
                 d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4M9 3h6m-6 0v4m6-4v4m-6 0H7m2 0h2"
               />
             </svg>
-            <p class="text-sm">Anslut din Snowsky Echo Mini</p>
+            <p class="text-sm">Connect your Snowsky Echo Mini</p>
           </div>
 
           <!-- Detected mount devices list -->
@@ -523,7 +523,7 @@
             <p
               class="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2"
             >
-              Upptäckta enheter (USB-lagring)
+              Detected devices (USB storage)
             </p>
             <template x-for="md in mountDevices" :key="md.mount_path">
               <div
@@ -558,7 +558,7 @@
                   <p class="font-medium text-sm truncate" x-text="md.name"></p>
                   <p
                     class="text-xs text-gray-400"
-                    x-text="`${md.track_count} ljudfiler`"
+                    x-text="`${md.track_count} audio files`"
                   ></p>
                   <p class="text-xs text-gray-400" x-text="md.mount_path"></p>
                 </div>
@@ -594,7 +594,7 @@
               <circle cx="12" cy="12" r="10" stroke-opacity=".25" />
               <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round" />
             </svg>
-            <span class="ml-2 text-sm">Söker efter anslutna enheter…</span>
+            <span class="ml-2 text-sm">Searching for connected devices…</span>
           </div>
 
           <!-- Loading -->
@@ -612,7 +612,7 @@
               <circle cx="12" cy="12" r="10" stroke-opacity=".25" />
               <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round" />
             </svg>
-            <span class="ml-2 text-sm">Läser in…</span>
+            <span class="ml-2 text-sm">Loading…</span>
           </div>
 
           <!-- ── FOLDER VIEW (mount only, default) ── -->
@@ -631,7 +631,7 @@
                   @click="navigateFolder('')"
                   class="hover:cursor-pointer flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors font-medium shrink-0"
                   :title="selectedMount?.name || 'Enhet'"
-                  aria-label="Gå till enhetens startmapp"
+                  aria-label="Go to device root folder"
                 >
                   <svg
                     class="w-3.5 h-3.5"
@@ -737,14 +737,14 @@
                 class="text-xs font-medium text-violet-600 dark:text-violet-400 hover:text-violet-700 transition-colors hover:cursor-pointer"
               >
                 <span
-                  x-text="folderContents.files.every(f => selectedDevice.has(f.id)) ? 'Avmarkera alla' : 'Välj alla'"
+                  x-text="folderContents.files.every(f => selectedDevice.has(f.id)) ? 'Deselect all' : 'Select all'"
                 ></span>
               </button>
               <span class="flex-1"></span>
               <span
                 class="text-xs text-gray-400"
                 x-show="selectedDevice.size > 0"
-                x-text="`${selectedDevice.size} valda`"
+                x-text="`${selectedDevice.size} selected`"
               ></span>
             </div>
 
@@ -761,7 +761,7 @@
                   @keydown.space.prevent="navigateFolder(dir.rel_path)"
                   role="button"
                   tabindex="0"
-                  :aria-label="`Öppna mappen ${dir.name}`"
+                  :aria-label="`Open folder ${dir.name}`"
                   class="flex items-center gap-2 px-3 py-2.5 cursor-pointer border-b border-gray-100 dark:border-gray-800/60 hover:bg-gray-50 dark:hover:bg-gray-900/40 transition-colors group"
                 >
                   <div
@@ -786,14 +786,14 @@
                     ></p>
                     <p
                       class="text-xs text-gray-400"
-                      x-text="`${dir.file_count} ljudfiler · ${fmtBytes(dir.audio_size_bytes)}`"
+                      x-text="`${dir.file_count} audio files · ${fmtBytes(dir.audio_size_bytes)}`"
                     ></p>
                   </div>
                   <button
                     @click.stop="deleteFolder(dir.rel_path)"
                     class="hover:cursor-pointer w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 shrink-0"
-                    title="Ta bort mapp"
-                    aria-label="Ta bort mapp"
+                    title="Delete folder"
+                    aria-label="Delete folder"
                   >
                     <svg
                       class="w-3.5 h-3.5"
@@ -838,7 +838,7 @@
                   <span
                     class="p-2 text-gray-300 dark:text-gray-600 text-xs shrink-0 cursor-grab"
                     @pointerdown.stop.prevent="startDevicePointerDrag(track)"
-                    title="Dra för att ändra ordning"
+                    title="Drag to reorder"
                     >⋮</span
                   >
                   <div
@@ -894,7 +894,7 @@
                       x-show="track.path"
                       @click.stop="togglePreview(track.path)"
                       class="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-violet-500 transition-colors"
-                      :title="previewPath === track.path && isPlaying ? 'Stoppa' : 'Förhandsgranska'"
+                      :title="previewPath === track.path && isPlaying ? 'Stop' : 'Preview'"
                     >
                       <svg
                         x-show="!(previewPath === track.path && isPlaying)"
@@ -918,7 +918,7 @@
                     <button
                       @click.stop="openDeviceMetaEditor(track)"
                       class="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-violet-500 transition-colors"
-                      title="Redigera metadata"
+                      title="Edit metadata"
                     >
                       <svg
                         class="w-3.5 h-3.5"
@@ -952,7 +952,7 @@
                 x-show="folderContents.directories.length === 0 && folderContents.files.length === 0"
                 class="flex flex-col items-center justify-center h-full gap-2 text-gray-400 dark:text-gray-600"
               >
-                <p class="text-sm">Tom mapp</p>
+                <p class="text-sm">Empty folder</p>
               </div>
             </div>
           </div>
@@ -964,7 +964,7 @@
               x-show="(device || (selectedMount && viewMode === 'flat')) && !isLoadingDevice && deviceTracks.length === 0"
               class="flex flex-col items-center justify-center h-full gap-2 text-gray-400 dark:text-gray-600"
             >
-              <p class="text-sm">Inga låtar på enheten</p>
+              <p class="text-sm">No tracks on the device</p>
             </div>
 
             <!-- Track rows -->
@@ -980,7 +980,7 @@
                 <span
                   class="text-gray-300 dark:text-gray-600 text-xs shrink-0 cursor-grab"
                   @pointerdown.stop.prevent="startDevicePointerDrag(track)"
-                  title="Dra för att ändra ordning"
+                  title="Drag to reorder"
                   >⋮⋮</span
                 >
                 <div
@@ -1028,7 +1028,7 @@
                     x-show="track.path"
                     @click.stop="togglePreview(track.path)"
                     class="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-violet-500 transition-colors"
-                    :title="previewPath === track.path && isPlaying ? 'Stoppa' : 'Förhandsgranska'"
+                    :title="previewPath === track.path && isPlaying ? 'Stop' : 'Preview'"
                   >
                     <svg
                       x-show="!(previewPath === track.path && isPlaying)"
@@ -1053,7 +1053,7 @@
                     x-show="selectedMount && track.path"
                     @click.stop="selectedMount && openDeviceMetaEditor(track)"
                     class="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-violet-500 transition-colors"
-                    title="Redigera metadata"
+                    title="Edit metadata"
                   >
                     <svg
                       class="w-3.5 h-3.5"
@@ -1093,7 +1093,7 @@
             x-show="devicePlaylists.length === 0"
             class="flex items-center justify-center h-full text-gray-400 dark:text-gray-600 text-sm"
           >
-            Inga spellistor
+            No playlists
           </div>
           <template x-for="pl in devicePlaylists" :key="pl.id">
             <div
@@ -1108,7 +1108,7 @@
                 <p class="truncate font-medium text-xs" x-text="pl.name"></p>
                 <p
                   class="text-xs text-gray-400"
-                  x-text="`${pl.track_ids.length} låtar`"
+                  x-text="`${pl.track_ids.length} tracks`"
                 ></p>
               </div>
               <button
@@ -1137,16 +1137,16 @@
         class="flex items-center gap-2 px-3 py-1 text-xs text-gray-500 border-b border-gray-100 dark:border-gray-800"
       >
         <span
-          x-text="`${transferList.filter(t => t.status === 'done').length} klara · ${transferList.filter(t => t.status === 'error').length} fel`"
+          x-text="`${transferList.filter(t => t.status === 'done').length} completed · ${transferList.filter(t => t.status === 'error').length} errors`"
         ></span>
         <span class="flex-1"></span>
         <button
           x-show="isTransferring"
           @click="cancelTransfer()"
           class="text-amber-600 hover:text-amber-700"
-          aria-label="Avbryt överföring"
+          aria-label="Cancel transfer"
         >
-          Avbryt
+          Cancel
         </button>
       </div>
       <template x-for="t in transferList" :key="t.id">
@@ -1162,7 +1162,7 @@
                 :aria-valuenow="t.percent"
                 aria-valuemin="0"
                 aria-valuemax="100"
-                :aria-label="`Överför ${t.filename}`"
+                :aria-label="`Transfer ${t.filename}`"
               >
                 <div
                   class="h-full rounded-full bg-violet-500 progress-animated transition-all duration-300"
@@ -1176,7 +1176,7 @@
             </div>
           </template>
           <template x-if="t.status === 'done'">
-            <span class="text-xs text-emerald-500 shrink-0">✓ Klar</span>
+            <span class="text-xs text-emerald-500 shrink-0">✓ Done</span>
           </template>
           <template x-if="t.status === 'error'">
             <div class="flex items-center gap-2 shrink-0">
@@ -1185,9 +1185,9 @@
                 @click="retryTransfer(t.id)"
                 x-show="!t.sourceFile?.originalPath"
                 class="text-xs text-violet-600 hover:text-violet-700"
-                aria-label="Försök överföra igen"
+                aria-label="Retry transfer"
               >
-                Försök igen
+                Retry
               </button>
             </div>
           </template>
@@ -1227,11 +1227,11 @@
           </div>
           <div>
             <h2 id="sync-result-title" class="font-semibold text-base">
-              Mappen är redan synkroniserad
+              Folder is already synchronized
             </h2>
             <p class="text-sm text-gray-500 mt-1">
-              Alla <span x-text="syncSummary?.skipped || 0"></span> ljudfiler
-              finns redan på enheten och är oförändrade.
+              All <span x-text="syncSummary?.skipped || 0"></span> audio files
+              are already on the device and unchanged.
             </p>
           </div>
         </div>
@@ -1259,7 +1259,7 @@
         @click.stop
         class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-6 border border-gray-200 dark:border-gray-700"
       >
-        <h2 class="font-semibold text-base mb-4">Redigera metadata</h2>
+        <h2 class="font-semibold text-base mb-4">Edit metadata</h2>
 
         <!-- Cover art -->
         <div class="flex justify-center mb-4">
@@ -1285,7 +1285,7 @@
         <div class="grid grid-cols-2 gap-3">
           <div class="col-span-2">
             <label class="block text-xs font-medium text-gray-500 mb-1"
-              >Titel</label
+              >Title</label
             >
             <input
               x-model="metaForm.title"
@@ -1325,7 +1325,7 @@
           </div>
           <div>
             <label class="block text-xs font-medium text-gray-500 mb-1"
-              >År</label
+              >Year</label
             >
             <input
               x-model.number="metaForm.year"
@@ -1337,7 +1337,7 @@
           </div>
           <div>
             <label class="block text-xs font-medium text-gray-500 mb-1"
-              >Spårnr</label
+              >Track no.</label
             >
             <input
               x-model.number="metaForm.track_number"
@@ -1353,14 +1353,14 @@
             @click="metaModal = false"
             class="px-4 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
           >
-            Avbryt
+            Cancel
           </button>
           <button
             @click="saveMeta()"
             :disabled="metaSaving"
             class="px-4 py-1.5 text-sm rounded-lg bg-violet-600 hover:bg-violet-700 text-white font-medium transition-colors disabled:opacity-50"
           >
-            <span x-text="metaSaving ? 'Sparar…' : 'Spara'"></span>
+            <span x-text="metaSaving ? 'Saving…' : 'Save'"></span>
           </button>
         </div>
       </div>
@@ -1379,9 +1379,9 @@
         @click.stop
         class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm p-6 border border-gray-200 dark:border-gray-700"
       >
-        <h2 class="font-semibold text-base mb-1">Formatkonvertering</h2>
+        <h2 class="font-semibold text-base mb-1">Format conversion</h2>
         <p class="text-xs text-gray-500 mb-4">
-          Dina filer är inte i MP3. Vill du konvertera dem med ffmpeg?
+          Your files are not MP3. Would you like to convert them with ffmpeg?
         </p>
 
         <div class="space-y-3 mb-4">
@@ -1407,7 +1407,7 @@
           >
             <label
               class="text-xs font-medium text-gray-600 dark:text-gray-400 w-20"
-              >Bithastighet</label
+              >Bitrate</label
             >
             <select
               x-model.number="convertBitrate"
@@ -1426,19 +1426,19 @@
             @click="convertModal = false"
             class="px-4 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
           >
-            Avbryt
+            Cancel
           </button>
           <button
             @click="confirmConvert(false)"
             class="px-4 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
           >
-            Behåll original
+            Keep original
           </button>
           <button
             @click="confirmConvert(true)"
             class="px-4 py-1.5 text-sm rounded-lg bg-violet-600 hover:bg-violet-700 text-white font-medium transition-colors"
           >
-            Konvertera
+            Convert
           </button>
         </div>
       </div>
@@ -1457,31 +1457,31 @@
         @click.stop
         class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-xs p-6 border border-gray-200 dark:border-gray-700"
       >
-        <h2 class="font-semibold text-base mb-4">Ny spellista</h2>
+        <h2 class="font-semibold text-base mb-4">New playlist</h2>
         <input
           x-model="plName"
           type="text"
-          placeholder="Spellista-namn…"
+          placeholder="Playlist name…"
           @keydown.enter="savePlaylist()"
           class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-violet-500"
         />
         <p
           class="text-xs text-gray-400 mb-4"
-          x-text="`${plTracks.length} valda låtar läggs till`"
+          x-text="`${plTracks.length} selected tracks will be added`"
         ></p>
         <div class="flex gap-3 justify-end">
           <button
             @click="plModal = false"
             class="px-4 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
           >
-            Avbryt
+            Cancel
           </button>
           <button
             @click="savePlaylist()"
             :disabled="!plName.trim()"
             class="px-4 py-1.5 text-sm rounded-lg bg-violet-600 hover:bg-violet-700 text-white font-medium transition-colors disabled:opacity-40"
           >
-            Skapa
+            Create
           </button>
         </div>
       </div>
