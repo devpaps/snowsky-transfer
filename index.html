@@ -12,16 +12,18 @@
     @pointerup.window="endLocalPointerDrag(); endDevicePointerDrag()"
     @pointercancel.window="endLocalPointerDrag(); endDevicePointerDrag()"
     x-init="init()"
-    class="h-full flex flex-col bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 text-sm select-none overflow-hidden"
+    class="studio-shell h-full flex flex-col bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 text-sm select-none overflow-hidden"
   >
     <!-- ══════════════════════════════════════════════════════════════
      TOP BAR
 ═══════════════════════════════════════════════════════════════ -->
     <header
-      class="flex items-center justify-between px-4 h-12 border-b border-gray-200 dark:border-gray-800 shrink-0"
+      class="studio-header flex items-center justify-between px-4 h-12 border-b border-gray-200 dark:border-gray-800 shrink-0"
     >
       <!-- Logo -->
-      <div class="flex items-center gap-2 font-semibold tracking-tight">
+      <div
+        class="studio-brand flex items-center gap-2 font-semibold tracking-tight"
+      >
         <svg
           class="w-5 h-5 text-violet-500"
           viewBox="0 0 24 24"
@@ -126,10 +128,10 @@
     <!-- ══════════════════════════════════════════════════════════════
      MAIN LAYOUT — split pane
 ═══════════════════════════════════════════════════════════════ -->
-    <main class="flex flex-1 min-h-0">
+    <main class="studio-main flex flex-1 min-h-0">
       <!-- ── LEFT: Local files ────────────────────────────────── -->
       <section
-        class="w-1/2 flex flex-col border-r border-gray-200 dark:border-gray-800 min-h-0"
+        class="studio-pane w-1/2 flex flex-col border-r border-gray-200 dark:border-gray-800 min-h-0"
       >
         <!-- Toolbar -->
         <div
@@ -382,7 +384,7 @@
       </section>
 
       <!-- ── RIGHT: Device ────────────────────────────────────── -->
-      <section class="w-1/2 flex flex-col min-h-0">
+      <section class="studio-pane w-1/2 flex flex-col min-h-0">
         <!-- Tab bar -->
         <div
           class="flex border-b border-gray-200 dark:border-gray-800 shrink-0"
@@ -410,7 +412,7 @@
           ? 'border-violet-600 text-violet-600 dark:text-violet-400'
           : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'"
           >
-            Spellistor (<span x-text="devicePlaylists.length"></span>)
+            Playlists (<span x-text="devicePlaylists.length"></span>)
           </button>
 
           <span class="flex-1"></span>
@@ -917,7 +919,7 @@
                     <!-- Edit metadata -->
                     <button
                       @click.stop="openDeviceMetaEditor(track)"
-                      class="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-violet-500 transition-colors"
+                      class="hover:cursor-pointer w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-violet-500 transition-colors"
                       title="Edit metadata"
                     >
                       <svg
@@ -1128,7 +1130,7 @@
 ═══════════════════════════════════════════════════════════════ -->
     <div
       x-show="transferList.length > 0"
-      class="border-t border-gray-200 dark:border-gray-800 shrink-0 bg-white dark:bg-gray-950 max-h-36 overflow-y-auto"
+      class="studio-activity border-t border-gray-200 dark:border-gray-800 shrink-0 bg-white dark:bg-gray-950 max-h-36 overflow-y-auto"
       role="status"
       aria-live="polite"
       x-ref="transferPanel"

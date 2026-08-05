@@ -1,5 +1,113 @@
 @import "tailwindcss";
 
+/* ── Dark studio console ──────────────────────────────────── */
+:root {
+  color-scheme: dark;
+  --studio-canvas: #111315;
+  --studio-surface: #181b1e;
+  --studio-surface-raised: #202428;
+  --studio-surface-hover: #272c30;
+  --studio-border: #30363b;
+  --studio-border-soft: #252a2e;
+  --studio-text: #f4f1ea;
+  --studio-muted: #92999e;
+  --studio-faint: #626a70;
+  --studio-cyan: #48d9e8;
+  --studio-cyan-dark: #1599ab;
+  --studio-green: #72d39a;
+  --studio-amber: #f0b35a;
+  --studio-red: #f27c78;
+}
+
+html, body { background: var(--studio-canvas); }
+body.studio-shell {
+  background:
+    radial-gradient(circle at 72% -15%, rgba(72, 217, 232, .10), transparent 30rem),
+    var(--studio-canvas) !important;
+  color: var(--studio-text) !important;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  letter-spacing: .005em;
+}
+
+.studio-header {
+  height: 4.5rem;
+  padding-inline: 1.5rem;
+  background: rgba(24, 27, 30, .94) !important;
+  border-color: var(--studio-border) !important;
+  box-shadow: 0 1px 0 rgba(255,255,255,.025);
+}
+.studio-brand { font-size: .95rem; letter-spacing: -.02em; }
+.studio-brand svg { color: var(--studio-cyan) !important; filter: drop-shadow(0 0 10px rgba(72,217,232,.3)); }
+.studio-header > div:last-child { gap: 1rem; }
+.studio-header button.bg-violet-600,
+.studio-pane button.bg-violet-600,
+button.bg-violet-600 { background: var(--studio-cyan-dark) !important; color: #061215 !important; box-shadow: 0 0 0 1px rgba(72,217,232,.15), 0 5px 16px rgba(21,153,171,.16); }
+button.bg-violet-600:hover { background: var(--studio-cyan) !important; }
+
+.studio-main { gap: 1px; background: var(--studio-border); }
+.studio-main > .studio-pane:first-child { flex: 0 0 43%; width: auto; }
+.studio-main > .studio-pane:last-child { flex: 1 1 auto; width: auto; }
+.studio-pane {
+  background: var(--studio-surface) !important;
+  border-color: var(--studio-border) !important;
+}
+.studio-pane > div:first-child,
+.studio-pane > section:first-child {
+  background: rgba(32,36,40,.72);
+  border-color: var(--studio-border) !important;
+}
+.studio-pane > div:first-child { min-height: 3.25rem; }
+.studio-pane > div:first-child > span:first-child,
+.studio-pane > div:first-child > [class~="font-semibold"] { color: var(--studio-text) !important; }
+.studio-pane [class~="border-gray-200"],
+.studio-pane [class~="border-gray-100"],
+.studio-pane [class~="dark:border-gray-800"],
+.studio-pane [class~="dark:border-gray-800/60"] { border-color: var(--studio-border-soft) !important; }
+
+/* Translate the existing utility palette into the studio tokens. */
+.studio-shell [class~="bg-white"], .studio-shell [class~="dark:bg-gray-950"] { background-color: var(--studio-surface) !important; }
+.studio-shell [class~="bg-gray-50"], .studio-shell [class~="dark:bg-gray-900/40"], .studio-shell [class~="dark:bg-gray-900"] { background-color: var(--studio-surface-raised) !important; }
+.studio-shell [class~="bg-gray-100"], .studio-shell [class~="dark:bg-gray-800"] { background-color: #2a3035 !important; }
+.studio-shell [class~="hover:bg-gray-50"]:hover, .studio-shell [class~="dark:hover:bg-gray-900/40"]:hover,
+.studio-shell [class~="hover:bg-gray-100"]:hover, .studio-shell [class~="dark:hover:bg-gray-800"]:hover { background-color: var(--studio-surface-hover) !important; }
+.studio-shell [class~="text-gray-900"], .studio-shell [class~="dark:text-gray-100"] { color: var(--studio-text) !important; }
+.studio-shell [class~="text-gray-700"], .studio-shell [class~="dark:hover:text-gray-300"]:hover { color: #d5d9da !important; }
+.studio-shell [class~="text-gray-600"], .studio-shell [class~="text-gray-500"], .studio-shell [class~="text-gray-400"], .studio-shell [class~="dark:text-gray-500"], .studio-shell [class~="dark:text-gray-600"] { color: var(--studio-muted) !important; }
+.studio-shell [class~="border-gray-200"], .studio-shell [class~="border-gray-100"], .studio-shell [class~="dark:border-gray-700"], .studio-shell [class~="dark:border-gray-800"] { border-color: var(--studio-border) !important; }
+.studio-shell [class~="text-violet-500"], .studio-shell [class~="text-violet-600"], .studio-shell [class~="dark:text-violet-400"] { color: var(--studio-cyan) !important; }
+.studio-shell [class~="border-violet-600"] { border-color: var(--studio-cyan) !important; }
+.studio-shell [class~="bg-violet-50"], .studio-shell [class~="dark:bg-violet-900/20"], .studio-shell [class~="bg-violet-100"], .studio-shell [class~="dark:bg-violet-900/30"] { background-color: rgba(72,217,232,.11) !important; }
+
+.studio-pane > div:nth-child(2) { scrollbar-color: #3d474c transparent; }
+.studio-pane .rounded-xl, .studio-pane .rounded-2xl { border-radius: .8rem; }
+.studio-pane button { transition: background-color .18s ease, color .18s ease, border-color .18s ease, transform .18s ease; }
+.studio-pane button:active { transform: translateY(1px); }
+.studio-pane [class~="uppercase"] { letter-spacing: .14em; color: var(--studio-faint) !important; }
+.studio-pane [class~="font-mono"] { color: #9fa8ac !important; background: #2a3035 !important; }
+.studio-pane .w-8.h-8 { border: 1px solid rgba(255,255,255,.06); }
+
+.studio-activity {
+  background: #15181a !important;
+  border-color: var(--studio-border) !important;
+  box-shadow: 0 -8px 24px rgba(0,0,0,.14);
+}
+.studio-activity .bg-violet-500 { background: var(--studio-cyan) !important; }
+.studio-activity [class~="bg-gray-200"], .studio-activity [class~="dark:bg-gray-700"] { background: #343b40 !important; }
+
+input, select { color-scheme: dark; }
+input:focus, select:focus { border-color: var(--studio-cyan) !important; box-shadow: 0 0 0 3px rgba(72,217,232,.14) !important; }
+[x-cloak] { display: none !important; }
+
+@media (max-width: 760px) {
+  .studio-header { padding-inline: 1rem; }
+  .studio-header > div:last-child > div { display: none; }
+  .studio-main { flex-direction: column; overflow-y: auto; }
+  .studio-pane { width: 100% !important; min-height: 21rem; }
+  .studio-main > .studio-pane:first-child,
+  .studio-main > .studio-pane:last-child { flex: 0 0 auto; }
+  .studio-pane:first-child { border-right: 0; border-bottom: 1px solid var(--studio-border); }
+}
+
 /* ── Scrollbar ────────────────────────────────────────────── */
 ::-webkit-scrollbar       { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
