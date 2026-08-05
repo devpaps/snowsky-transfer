@@ -125,6 +125,11 @@ async fn get_local_metadata(path: String) -> Result<metadata::TrackMetadata, App
         .map_err(|e| AppError::Task(e.to_string()))?
 }
 
+#[tauri::command]
+async fn get_local_file_size(path: String) -> Result<u64, AppError> {
+    Ok(std::fs::metadata(path)?.len())
+}
+
 /// Write updated metadata back to a local audio file.
 #[tauri::command]
 async fn update_local_metadata(
@@ -225,6 +230,23 @@ async fn convert_audio(
     .map_err(|e| AppError::Task(e.to_string()))?
 }
 
+/// Remove a temporary conversion file after a mounted-device transfer.
+#[tauri::command]
+async fn cleanup_temp_file(
+    state: tauri::State<'_, AppState>,
+    path: String,
+) -> Result<(), AppError> {
+    let temp_files = Arc::clone(&state.temp_files);
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut files = temp_files.lock().unwrap();
+        files.retain(|known| known != &path);
+        let _ = std::fs::remove_file(path);
+        Ok(())
+    })
+    .await
+    .map_err(|e| AppError::Task(e.to_string()))?
+}
+
 /// Return whether ffmpeg is available on PATH.
 #[tauri::command]
 async fn ffmpeg_available() -> bool {
@@ -308,6 +330,13 @@ async fn create_dir_all(path: String) -> Result<(), AppError> {
     fs::create_dir_all(&path)
 }
 
+#[tauri::command]
+async fn sync_mount(mount_path: String) -> Result<(), AppError> {
+    tauri::async_runtime::spawn_blocking(move || fs::sync_mount(&mount_path))
+        .await
+        .map_err(|e| AppError::Task(e.to_string()))?
+}
+
 // ─── App entry-point ─────────────────────────────────────────────────────────
 
 pub fn run() {
@@ -327,6 +356,7 @@ pub fn run() {
             send_tracks,
             delete_track,
             get_local_metadata,
+            get_local_file_size,
             update_local_metadata,
             preview_track,
             stop_preview,
@@ -336,6 +366,7 @@ pub fn run() {
             update_playlist,
             delete_playlist,
             convert_audio,
+            cleanup_temp_file,
             ffmpeg_available,
             detect_mounts,
             scan_mount_device,
@@ -347,6 +378,7 @@ pub fn run() {
             get_disk_usage,
             expand_audio_path,
             create_dir_all,
+            sync_mount,
         ])
         .run(tauri::generate_context!())
         .expect("Error while running Snowsky Transfer");

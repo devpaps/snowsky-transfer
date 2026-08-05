@@ -29,6 +29,26 @@ function extOf(path) {
   return path.split('.').pop().toLowerCase()
 }
 
+function trackNumberOf(file) {
+  const metadataNumber = Number(file.meta?.track_number)
+  if (Number.isFinite(metadataNumber) && metadataNumber > 0) return metadataNumber
+  const match = file.name.match(/^\s*(\d{1,3})(?:\s*[-._)]|\s)/)
+  return match ? Number(match[1]) : 999
+}
+
+function deviceTrackNumber(track) {
+  const match = track.filename?.match(/^\s*(\d{1,3})(?:\s*[-._)]|\s)/)
+  return match ? Number(match[1]) : (track.track_number || 999)
+}
+
+function syncPathKey(path) {
+  return path
+    .split('/')
+    .map(part => part.replace(/^\d{1,3}\s*-\s*/, ''))
+    .join('/')
+    .toLowerCase()
+}
+
 const AUDIO_EXTS = new Set(['mp3', 'flac', 'ogg', 'wav', 'm4a', 'aac'])
 
 // ─── Alpine app ──────────────────────────────────────────────────────────────
@@ -52,6 +72,7 @@ Alpine.data('app', () => ({
   folderPath:     '',
   folderContents: { directories: [], files: [] },
   folderHistory:  [],        // stack of previous folder paths
+  transferDestination: '',
 
   // ── Disk usage
   selectedMountDisk: null,   // DiskUsage | null
@@ -63,6 +84,11 @@ Alpine.data('app', () => ({
   // ── Transfer
   transfers:      {},     // id -> { filename, percent, status }
   isTransferring: false,
+  cancelTransferRequested: false,
+  transferNotice: null,
+  transferCloseTimer: null,
+  syncSummary: null,
+  syncModal: false,
 
   // ── Device tab
   activeDeviceTab: 'tracks',
@@ -75,6 +101,7 @@ Alpine.data('app', () => ({
   // ── Metadata editor modal
   metaModal:      false,
   metaFile:       null,
+  metaFileType:   'local',
   metaForm:       {},
   metaSaving:     false,
 
@@ -99,14 +126,17 @@ Alpine.data('app', () => ({
     await listen('transfer:start', (e) => {
       const { id, filename, index, total } = e.payload
       this.transfers[id] = { filename, percent: 0, status: 'transferring', index, total }
+      this.scrollTransferPanel()
     })
     await listen('transfer:progress', (e) => {
       const { id, percent } = e.payload
       if (this.transfers[id]) this.transfers[id].percent = percent
+      this.scrollTransferPanel()
     })
     await listen('transfer:done', (e) => {
       const { id } = e.payload
       if (this.transfers[id]) this.transfers[id].status = 'done'
+      this.scrollTransferPanel()
     })
     await listen('transfer:error', (e) => {
       const { id, error } = e.payload
@@ -114,6 +144,7 @@ Alpine.data('app', () => ({
         this.transfers[id].status = 'error'
         this.transfers[id].error  = error
       }
+      this.scrollTransferPanel()
     })
 
     // File drag-drop via Tauri window event
@@ -245,6 +276,8 @@ Alpine.data('app', () => ({
 
   async deleteFolder(relPath) {
     if (!this.selectedMount) return
+    const name = relPath.split('/').pop() || relPath
+    if (!window.confirm(`Ta bort mappen "${name}" och allt innehåll?`)) return
     const fullPath = this.selectedMount.mount_path + '/' + relPath
     try {
       await invoke('delete_mount_folder', { path: fullPath })
@@ -293,6 +326,19 @@ Alpine.data('app', () => ({
     this.selectedMountDisk = null
   },
 
+  async safeEjectMount() {
+    if (!this.selectedMount || this.isTransferring) return
+    if (!window.confirm('Synkronisera skrivningar och koppla från enheten?')) return
+    try {
+      await invoke('sync_mount', { mountPath: this.selectedMount.mount_path })
+      await this.disconnectMount()
+      this.transferNotice = 'Enheten är säkert frånkopplad'
+    } catch (e) {
+      console.error('sync_mount error:', e)
+      window.alert(`Kunde inte koppla från enheten: ${e}`)
+    }
+  },
+
   async disconnectDevice() {
     await invoke('disconnect_device')
     this.device        = null
@@ -312,6 +358,10 @@ Alpine.data('app', () => ({
     this.isLoadingDevice = true
     try {
       this.deviceTracks = await invoke('get_device_tracks')
+      this.deviceTracks.sort((a, b) =>
+        deviceTrackNumber(a) - deviceTrackNumber(b) ||
+        a.filename.localeCompare(b.filename, undefined, { numeric: true })
+      )
     } catch (e) {
       console.error('get_device_tracks error:', e)
     } finally {
@@ -330,6 +380,7 @@ Alpine.data('app', () => ({
   async deleteSelectedDeviceTracks() {
     if (!this.selectedDevice.size) return
     const ids = [...this.selectedDevice]
+    if (!window.confirm(`Ta bort ${ids.length} valda ${ids.length === 1 ? 'fil' : 'filer'}?`)) return
 
     if (this.selectedMount) {
       // Mount device: delete files by path
@@ -377,6 +428,65 @@ Alpine.data('app', () => ({
       filters: [{ name: 'Audio', extensions: ['mp3','flac','ogg','wav','m4a','aac'] }],
     })
     if (paths) this.addFilePaths(Array.isArray(paths) ? paths : [paths])
+  },
+
+  async syncFolder() {
+    if (!this.selectedMount || this.isTransferring) return
+    const folder = await open({ directory: true, multiple: false })
+    if (!folder || Array.isArray(folder)) return
+
+    try {
+      const sourceFiles = await invoke('expand_audio_path', { path: folder })
+      const deviceFiles = await invoke('get_mount_tracks', { mountPath: this.selectedMount.mount_path })
+      const rootName = folder.split('/').filter(Boolean).pop() || 'Music'
+      const deviceByPath = new Map(deviceFiles.map(file => [syncPathKey(file.id), file]))
+      const candidates = []
+      let skipped = 0
+      let changed = 0
+
+      for (const sourcePath of sourceFiles) {
+        const relative = sourcePath.slice(folder.length).replace(/^\/+/, '')
+        const targetId = `${rootName}/${relative}`
+        const existing = deviceByPath.get(syncPathKey(targetId))
+        const sourceSize = Number(await invoke('get_local_file_size', { path: sourcePath }))
+        if (existing && Number(existing.file_size) === sourceSize) {
+          skipped++
+          continue
+        }
+        if (existing) changed++
+        candidates.push({
+          path: sourcePath,
+          name: sourcePath.split('/').pop(),
+          ext: extOf(sourcePath),
+          subPath: `${rootName}/${relative}`,
+          meta: null,
+          loading: true,
+        })
+      }
+
+      await Promise.all(candidates.map(async file => {
+        try { file.meta = await invoke('get_local_metadata', { path: file.path }) } catch (_) { file.meta = null }
+        file.loading = false
+      }))
+      this.syncSummary = { folder: rootName, skipped, changed, pending: candidates.length }
+
+      if (!candidates.length) {
+        this.syncModal = true
+        return
+      }
+      if (!window.confirm(`Synkronisera ${candidates.length} nya eller ändrade filer till mappen "${rootName}"?`)) return
+
+      for (const file of candidates) {
+        const relative = file.subPath
+        const existing = deviceByPath.get(syncPathKey(relative))
+        if (existing) await invoke('delete_mount_file', { path: existing.path })
+      }
+      this.transferDestination = ''
+      await this.doMountTransfer(candidates)
+    } catch (e) {
+      console.error('syncFolder error:', e)
+      window.alert(`Kunde inte synkronisera mappen: ${e}`)
+    }
   },
 
   async addFilePaths(paths) {
@@ -446,12 +556,26 @@ Alpine.data('app', () => ({
     if (!this.device && !this.selectedMount) return
 
     const files = this.selectedLocalFiles
+    if (files.some(file => file.loading)) {
+      window.alert('Vänta tills låtarnas metadata har lästs in innan du överför.')
+      return
+    }
+
+    if (this.selectedMount) {
+      const sizes = await Promise.all(files.map(file => invoke('get_local_file_size', { path: file.path })))
+      const required = sizes.reduce((sum, size) => sum + Number(size), 0)
+      const disk = await invoke('get_disk_usage', { mountPath: this.selectedMount.mount_path })
+      if (required > Number(disk.free_bytes)) {
+        window.alert(`Inte tillräckligt med utrymme. Behöver ${fmtBytes(required)}, men bara ${fmtBytes(Number(disk.free_bytes))} är ledigt.`)
+        return
+      }
+    }
 
     // Sort by track number so files arrive in order on the device
     const sorted = [...files].sort((a, b) => {
-      const ta = a.meta?.track_number ?? 999
-      const tb = b.meta?.track_number ?? 999
-      return ta - tb
+      const ta = trackNumberOf(a)
+      const tb = trackNumberOf(b)
+      return ta - tb || a.name.localeCompare(b.name, undefined, { numeric: true })
     })
 
     // If ffmpeg available, ask about conversion (skip MP3 and FLAC)
@@ -491,7 +615,7 @@ Alpine.data('app', () => ({
             req: { input_path: r.file.path, output_fmt: r.convertTo, bitrate_kbps: r.bitrate }
           })
           if (this.selectedMount) {
-            mountFiles.push({ ...r.file, path: outPath })
+              mountFiles.push({ ...r.file, originalPath: r.file.path, path: outPath })
           } else {
             sendRequests.push(this.buildSendRequest(r.file, outPath))
           }
@@ -521,13 +645,20 @@ Alpine.data('app', () => ({
 
   buildSendRequest(file, convertedPath) {
     const m = file.meta || {}
+    const sourceName = file.name.replace(/\.[^.]+$/, '')
+    const extension = (convertedPath || file.path).split('.').pop()
+    const trackNumber = trackNumberOf(file)
+    const filename = trackNumber < 999
+      ? `${String(trackNumber).padStart(2, '0')} - ${sourceName}.${extension}`
+      : `${sourceName}.${extension}`
     return {
       path:         convertedPath || file.path,
+      filename,
       title:        m.title   || file.name.replace(/\.[^.]+$/, ''),
       artist:       m.artist  || null,
       album:        m.album   || null,
       genre:        m.genre   || null,
-      track_number: m.track_number || null,
+      track_number: trackNumber < 999 ? trackNumber : null,
       duration_ms:  m.duration_ms  || null,
     }
   },
@@ -535,6 +666,8 @@ Alpine.data('app', () => ({
   async doTransfer(requests) {
     this.isTransferring = true
     this.transfers      = {}
+    this.transferNotice = null
+    clearTimeout(this.transferCloseTimer)
     try {
       await invoke('send_tracks', { tracks: requests })
       await this.loadDeviceTracks()
@@ -542,29 +675,37 @@ Alpine.data('app', () => ({
       console.error('send_tracks error:', e)
     } finally {
       this.isTransferring = false
+      this.finishTransfer()
     }
   },
 
   async doMountTransfer(rawFiles) {
     if (!this.selectedMount) return
     this.isTransferring = true
+    this.cancelTransferRequested = false
     this.transfers      = {}
-    const dest          = this.selectedMount.mount_path
+    this.transferNotice = null
+    clearTimeout(this.transferCloseTimer)
+    const dest          = this.selectedMount.mount_path + (this.transferDestination ? '/' + this.transferDestination : '')
 
     // Sort by track number so files arrive in order on the device
     const files = [...rawFiles].sort((a, b) => {
-      const ta = a.meta?.track_number ?? 999
-      const tb = b.meta?.track_number ?? 999
-      return ta - tb
+      const ta = trackNumberOf(a)
+      const tb = trackNumberOf(b)
+      return ta - tb || a.name.localeCompare(b.name, undefined, { numeric: true })
     })
 
     for (let i = 0; i < files.length; i++) {
+      if (this.cancelTransferRequested) break
       const file   = files[i]
       const id     = `transfer-${i}`
 
       // Determine target directory and filename
       let targetDir   = dest
       let targetName  = file.name
+      if (file.originalPath && file.path !== file.originalPath) {
+        targetName = file.name.replace(/\.[^.]+$/, '.' + file.path.split('.').pop())
+      }
       if (file.subPath) {
         const parts = file.subPath.split('/')
         targetName = parts.pop()
@@ -582,12 +723,13 @@ Alpine.data('app', () => ({
       }
 
       // Prefix filename with track number for correct alphabetical sort on device
-      const trackNum = file.meta?.track_number
-      if (trackNum != null) {
+      const trackNum = trackNumberOf(file)
+      if (trackNum < 999) {
         targetName = String(trackNum).padStart(2, '0') + ' - ' + targetName
       }
 
-      this.transfers[id] = { filename: targetName, percent: 0, status: 'transferring', index: i, total: files.length }
+      this.transfers[id] = { filename: targetName, percent: 0, status: 'transferring', index: i, total: files.length, sourceFile: file }
+      this.scrollTransferPanel()
 
       try {
         await invoke('copy_to_device', {
@@ -603,16 +745,60 @@ Alpine.data('app', () => ({
         this.transfers[id].status = 'error'
         this.transfers[id].error  = e.toString()
       }
+      if (file.originalPath && file.path !== file.originalPath) {
+        await invoke('cleanup_temp_file', { path: file.path }).catch(error => console.error('cleanup_temp_file error:', error))
+      }
     }
 
     // Refresh view after copy
     if (this.viewMode === 'folder') {
-      await this.loadFolderContents(dest, this.folderPath)
+      await this.loadFolderContents(this.selectedMount.mount_path, this.transferDestination || this.folderPath)
     } else {
-      await this.loadMountTracks(dest)
+      await this.loadMountTracks(this.selectedMount.mount_path)
     }
-    this.loadDiskUsage(dest)
+    this.loadDiskUsage(this.selectedMount.mount_path)
     this.isTransferring = false
+    this.finishTransfer()
+    this.cancelTransferRequested = false
+  },
+
+  scrollTransferPanel() {
+    this.$nextTick(() => {
+      const panel = this.$refs.transferPanel
+      if (panel) panel.scrollTop = panel.scrollHeight
+    })
+  },
+
+  finishTransfer() {
+    const transfers = this.transferList
+    const done = transfers.filter(t => t.status === 'done').length
+    const errors = transfers.filter(t => t.status === 'error').length
+    if (!transfers.length) return
+    const cancelled = this.cancelTransferRequested
+
+    this.transferNotice = cancelled
+      ? `Överföring avbruten (${done} klara)`
+      : errors
+      ? `Överföring klar med ${errors} fel (${done} lyckades)`
+      : `${done} ${done === 1 ? 'fil överförd' : 'filer överförda'} utan problem`
+
+    this.transferCloseTimer = setTimeout(() => {
+      if (!this.isTransferring) this.transfers = {}
+    }, 3500)
+  },
+
+  cancelTransfer() {
+    this.cancelTransferRequested = true
+  },
+
+  async retryTransfer(id) {
+    const transfer = this.transfers[id]
+    if (!transfer?.sourceFile || transfer.sourceFile.originalPath || this.isTransferring) return
+    await this.doMountTransfer([transfer.sourceFile])
+  },
+
+  setTransferDestination() {
+    this.transferDestination = this.folderPath
   },
 
   get transferList() {
@@ -640,9 +826,26 @@ Alpine.data('app', () => ({
   // ─── Metadata editor ─────────────────────────────────────────────────────
   async openMetaEditor(file) {
     this.metaFile = file
+    this.metaFileType = 'local'
     this.metaForm = file.meta
       ? { ...file.meta }
       : { title: file.name.replace(/\.[^.]+$/, ''), artist: '', album: '', genre: '', year: '', track_number: '' }
+    this.metaModal = true
+  },
+
+  openDeviceMetaEditor(track) {
+    this.metaFile = track
+    this.metaFileType = 'device'
+    this.metaForm = {
+      title: track.title || '',
+      artist: track.artist || '',
+      album: track.album || '',
+      genre: track.genre || '',
+      year: track.year || '',
+      track_number: track.track_number || '',
+      duration_ms: track.duration_ms || 0,
+      cover_art: track.cover_art || null,
+    }
     this.metaModal = true
   },
 
@@ -651,7 +854,26 @@ Alpine.data('app', () => ({
     this.metaSaving = true
     try {
       await invoke('update_local_metadata', { path: this.metaFile.path, meta: this.metaForm })
-      this.metaFile.meta = { ...this.metaForm }
+      if (this.metaFileType === 'device') {
+        Object.assign(this.metaFile, {
+          title: this.metaForm.title || null,
+          artist: this.metaForm.artist || null,
+          album: this.metaForm.album || null,
+          genre: this.metaForm.genre || null,
+          year: this.metaForm.year || null,
+          track_number: this.metaForm.track_number || null,
+          cover_art: this.metaForm.cover_art || null,
+        })
+        if (this.selectedMount) {
+          if (this.viewMode === 'folder') {
+            await this.loadFolderContents(this.selectedMount.mount_path, this.folderPath)
+          } else {
+            await this.loadMountTracks(this.selectedMount.mount_path)
+          }
+        }
+      } else {
+        this.metaFile.meta = { ...this.metaForm }
+      }
       this.metaModal     = false
     } catch (e) {
       console.error('update_local_metadata error:', e)
@@ -679,6 +901,7 @@ Alpine.data('app', () => ({
   },
 
   async deletePlaylist(id) {
+    if (!window.confirm('Ta bort spellistan? Låtarna på enheten påverkas inte.')) return
     try {
       await invoke('delete_playlist', { playlistId: id })
       await this.loadPlaylists()

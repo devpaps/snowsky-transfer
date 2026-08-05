@@ -53,6 +53,7 @@
               @click="disconnectDevice()"
               class="text-xs text-gray-400 hover:text-red-500 transition-colors px-1"
               title="Koppla ifrån"
+              aria-label="Koppla ifrån enhet"
             >
               ✕
             </button>
@@ -80,8 +81,17 @@
               @click="disconnectMount()"
               class="text-xs text-gray-400 hover:text-red-500 transition-colors px-1"
               title="Koppla ifrån"
+              aria-label="Koppla ifrån enhet"
             >
               ✕
+            </button>
+            <button
+              @click="safeEjectMount()"
+              :disabled="isTransferring"
+              class="px-2 py-1 rounded-md text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
+              title="Säker koppla från"
+            >
+              Mata ut
             </button>
           </div>
         </template>
@@ -133,6 +143,15 @@
             class="hover:cursor-pointer px-2.5 py-1 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
           >
             + Lägg till
+          </button>
+          <button
+            x-show="selectedMount"
+            @click="syncFolder()"
+            :disabled="isTransferring"
+            class="px-2.5 py-1 rounded-md text-xs font-medium bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 hover:bg-violet-200 dark:hover:bg-violet-900/50 transition-colors disabled:opacity-50"
+            title="Synkronisera en lokal musikmapp"
+          >
+            Synka mapp
           </button>
           <button
             @click="selectAllLocal()"
@@ -727,6 +746,11 @@
               >
                 <div
                   @click="navigateFolder(dir.rel_path)"
+                  @keydown.enter="navigateFolder(dir.rel_path)"
+                  @keydown.space.prevent="navigateFolder(dir.rel_path)"
+                  role="button"
+                  tabindex="0"
+                  :aria-label="`Öppna mappen ${dir.name}`"
                   class="flex items-center gap-2 px-3 py-2.5 cursor-pointer border-b border-gray-100 dark:border-gray-800/60 hover:bg-gray-50 dark:hover:bg-gray-900/40 transition-colors group"
                 >
                   <div
@@ -755,9 +779,10 @@
                     ></p>
                   </div>
                   <button
-                    @click.stop="deleteFolder(dir.rel_path)"
-                    class="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 shrink-0"
-                    title="Ta bort mapp"
+                   @click.stop="deleteFolder(dir.rel_path)"
+                   class="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 shrink-0"
+                   title="Ta bort mapp"
+                   aria-label="Ta bort mapp"
                   >
                     <svg
                       class="w-3.5 h-3.5"
@@ -845,7 +870,7 @@
 
                   <div class="flex items-center gap-2 shrink-0">
                     <!-- Preview button (mount tracks only) -->
-                    <button
+                   <button
                       x-show="track.path"
                       @click.stop="togglePreview(track.path)"
                       class="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-violet-500 transition-colors"
@@ -867,6 +892,17 @@
                       >
                         <rect x="6" y="4" width="4" height="16" />
                         <rect x="14" y="4" width="4" height="16" />
+                     </svg>
+                   </button>
+                    <!-- Edit metadata -->
+                    <button
+                      @click.stop="openDeviceMetaEditor(track)"
+                      class="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-violet-500 transition-colors"
+                      title="Redigera metadata"
+                    >
+                      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                       </svg>
                     </button>
                     <span
@@ -949,9 +985,9 @@
 
                 <div class="flex items-center gap-2 shrink-0">
                   <!-- Preview button (mount tracks only) -->
-                  <button
-                    x-show="track.path"
-                    @click.stop="togglePreview(track.path)"
+                   <button
+                      x-show="track.path"
+                      @click.stop="togglePreview(track.path)"
                     class="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-violet-500 transition-colors"
                     :title="previewPath === track.path && isPlaying ? 'Stoppa' : 'Förhandsgranska'"
                   >
@@ -971,9 +1007,21 @@
                     >
                       <rect x="6" y="4" width="4" height="16" />
                       <rect x="14" y="4" width="4" height="16" />
-                    </svg>
-                  </button>
-                  <span
+                     </svg>
+                   </button>
+                    <!-- Edit metadata -->
+                    <button
+                      x-show="selectedMount && track.path"
+                      @click.stop="selectedMount && openDeviceMetaEditor(track)"
+                      class="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-violet-500 transition-colors"
+                      title="Redigera metadata"
+                    >
+                      <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                      </svg>
+                    </button>
+                    <span
                     class="text-xs text-gray-400"
                     x-text="fmtDuration(track.duration_ms)"
                   ></span>
@@ -1032,17 +1080,35 @@
     <div
       x-show="transferList.length > 0"
       class="border-t border-gray-200 dark:border-gray-800 shrink-0 bg-white dark:bg-gray-950 max-h-36 overflow-y-auto"
+      role="status"
+      aria-live="polite"
+      x-ref="transferPanel"
     >
-      <template x-for="t in transferList" :key="t.id">
+        <div class="flex items-center gap-2 px-3 py-1 text-xs text-gray-500 border-b border-gray-100 dark:border-gray-800">
+          <span x-text="`${transferList.filter(t => t.status === 'done').length} klara · ${transferList.filter(t => t.status === 'error').length} fel`"></span>
+          <span class="flex-1"></span>
+          <button
+            x-show="isTransferring"
+            @click="cancelTransfer()"
+            class="text-amber-600 hover:text-amber-700"
+            aria-label="Avbryt överföring"
+          >Avbryt</button>
+        </div>
+        <template x-for="t in transferList" :key="t.id">
         <div
           class="flex items-center gap-3 px-3 py-1.5 border-b border-gray-100 dark:border-gray-800/40 last:border-0"
         >
           <span class="text-xs truncate flex-1" x-text="t.filename"></span>
           <template x-if="t.status === 'transferring'">
             <div class="flex items-center gap-2 w-40 shrink-0">
-              <div
-                class="flex-1 h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden"
-              >
+                <div
+                  class="flex-1 h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden"
+                  role="progressbar"
+                  :aria-valuenow="t.percent"
+                  aria-valuemin="0"
+                  aria-valuemax="100"
+                  :aria-label="`Överför ${t.filename}`"
+                >
                 <div
                   class="h-full rounded-full bg-violet-500 progress-animated transition-all duration-300"
                   :style="`width:${t.percent}%`"
@@ -1058,12 +1124,64 @@
             <span class="text-xs text-emerald-500 shrink-0">✓ Klar</span>
           </template>
           <template x-if="t.status === 'error'">
-            <span class="text-xs text-red-500 shrink-0" :title="t.error"
-              >✕ Fel</span
-            >
+            <div class="flex items-center gap-2 shrink-0">
+              <span class="text-xs text-red-500" :title="t.error">✕ Fel</span>
+              <button
+                @click="retryTransfer(t.id)"
+                x-show="!t.sourceFile?.originalPath"
+                class="text-xs text-violet-600 hover:text-violet-700"
+                aria-label="Försök överföra igen"
+              >Försök igen</button>
+            </div>
           </template>
         </div>
       </template>
+    </div>
+
+    <div
+      x-show="transferNotice"
+      x-cloak
+      class="fixed right-4 bottom-4 z-40 max-w-sm rounded-xl border border-emerald-200 dark:border-emerald-900/60 bg-white dark:bg-gray-900 px-4 py-3 shadow-lg text-sm text-emerald-700 dark:text-emerald-300"
+      :class="transferNotice?.includes('fel') || transferNotice?.includes('avbruten')
+        ? 'border-amber-200 dark:border-amber-900/60 text-amber-700 dark:text-amber-300'
+        : 'border-emerald-200 dark:border-emerald-900/60 text-emerald-700 dark:text-emerald-300'"
+      role="alert"
+      x-text="transferNotice"
+    ></div>
+
+    <div
+      x-show="syncModal"
+      x-cloak
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      @keydown.escape.window="syncModal = false"
+    >
+      <div
+        @click.stop
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="sync-result-title"
+        class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm p-6 border border-gray-200 dark:border-gray-700"
+      >
+        <div class="flex items-start gap-3">
+          <div class="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 flex items-center justify-center shrink-0">
+            ✓
+          </div>
+          <div>
+            <h2 id="sync-result-title" class="font-semibold text-base">Mappen är redan synkroniserad</h2>
+            <p class="text-sm text-gray-500 mt-1">
+              Alla <span x-text="syncSummary?.skipped || 0"></span> ljudfiler finns redan på enheten och är oförändrade.
+            </p>
+          </div>
+        </div>
+        <div class="flex justify-end mt-5">
+          <button
+            @click="syncModal = false"
+            class="px-4 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium transition-colors"
+          >
+            OK
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- ══════════════════════════════════════════════════════════════

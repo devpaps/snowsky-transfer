@@ -256,6 +256,7 @@ pub struct Playlist {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct SendTrackRequest {
     pub path:         String,
+    pub filename:     Option<String>,
     pub title:        Option<String>,
     pub artist:       Option<String>,
     pub album:        Option<String>,
@@ -429,11 +430,13 @@ impl MtpManager {
         let path_c = CString::new(req.path.as_str())
             .map_err(|e| AppError::Mtp(e.to_string()))?;
 
-        let filename = std::path::Path::new(&req.path)
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("track")
-            .to_string();
+        let filename = req.filename.clone().unwrap_or_else(|| {
+            std::path::Path::new(&req.path)
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("track")
+                .to_string()
+        });
 
         let title_c    = CString::new(req.title.as_deref().unwrap_or(&filename)).unwrap();
         let artist_c   = CString::new(req.artist.as_deref().unwrap_or("")).unwrap();

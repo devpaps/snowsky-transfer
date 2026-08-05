@@ -157,23 +157,35 @@ pub fn copy_to_device(
     transfer_id: &str,
 ) -> Result<String, AppError> {
     let dest = Path::new(dest_dir).join(filename);
+    if dest.exists() {
+        return Err(AppError::Io(std::io::Error::new(
+            std::io::ErrorKind::AlreadyExists,
+            format!("File already exists: {}", dest.display()),
+        )));
+    }
     let src_meta = std::fs::metadata(source)?;
     let total = src_meta.len();
 
     // Chunked copy so we can report progress
     const CHUNK_SIZE: u64 = 512 * 1024; // 512 KiB
     let mut src_file = std::fs::File::open(source)?;
-    let mut dst_file = std::fs::File::create(&dest)?;
+    let temp_name = format!(
+        ".{}.{}.part",
+        filename,
+        std::process::id(),
+    );
+    let temp = Path::new(dest_dir).join(temp_name);
+    let mut dst_file = std::fs::File::create(&temp)?;
     let mut buf = vec![0u8; CHUNK_SIZE as usize];
     let mut copied = 0u64;
 
     use std::io::Read;
     use std::io::Write;
 
-    loop {
+    let result = loop {
         let n = src_file.read(&mut buf)?;
         if n == 0 {
-            break;
+            break Ok(());
         }
         dst_file.write_all(&buf[..n])?;
         copied += n as u64;
@@ -186,6 +198,15 @@ pub fn copy_to_device(
             "id":      transfer_id,
             "percent": pct,
         }));
+    };
+    if let Err(error) = result {
+        let _ = std::fs::remove_file(&temp);
+        return Err(error);
+    }
+    dst_file.sync_all()?;
+    if let Err(error) = std::fs::rename(&temp, &dest) {
+        let _ = std::fs::remove_file(&temp);
+        return Err(error.into());
     }
 
     Ok(dest.to_string_lossy().to_string())
@@ -206,6 +227,22 @@ pub fn delete_folder(path: &str) -> Result<(), AppError> {
 /// Create a directory and all parents on the mounted device.
 pub fn create_dir_all(path: &str) -> Result<(), AppError> {
     std::fs::create_dir_all(path)?;
+    Ok(())
+}
+
+pub fn sync_mount(mount_path: &str) -> Result<(), AppError> {
+    let sync_status = std::process::Command::new("sync").status()?;
+    if !sync_status.success() {
+        return Err(AppError::Task("Filesystem sync failed".into()));
+    }
+    let unmount_status = std::process::Command::new("umount")
+        .arg(mount_path)
+        .status()?;
+    if !unmount_status.success() {
+        return Err(AppError::Task(
+            "Could not unmount the device. Close files using it and try again.".into(),
+        ));
+    }
     Ok(())
 }
 
