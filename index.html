@@ -208,13 +208,13 @@
               <div
                 @click="toggleLocalFile(file.path)"
                 @pointerenter="moveLocalPointer(file.path)"
-                class="flex items-center gap-2 px-3 py-2 cursor-grab border-b border-gray-100 dark:border-gray-800/60 hover:bg-gray-50 dark:hover:bg-gray-900/40 transition-colors"
+                class="flex items-center gap-2 px-3 py-2 border-b border-gray-100 dark:border-gray-800/60 hover:bg-gray-50 dark:hover:bg-gray-900/40 transition-colors"
                 :class="draggedLocalPath === file.path && pointerDraggingLocal
                   ? 'bg-amber-100 dark:bg-amber-900/40 ring-1 ring-amber-300 dark:ring-amber-700'
                   : selectedLocal.has(file.path) ? 'bg-violet-50 dark:bg-violet-900/20' : ''"
               >
                 <span
-                  class="text-gray-300 dark:text-gray-600 text-xs shrink-0"
+                  class="text-gray-300 dark:text-gray-600 text-xs shrink-0 cursor-grab"
                   @pointerdown.stop.prevent="startLocalPointerDrag(file.path)"
                   title="Drag to reorder"
                   >⋮</span
@@ -356,13 +356,36 @@
           x-show="selectedLocal.size > 0"
           class="flex items-center gap-3 px-3 py-2 border-t border-gray-200 dark:border-gray-800 shrink-0 bg-white dark:bg-gray-950"
         >
-          <span class="text-xs text-gray-500">
+          <span class="text-xs text-gray-500 leading-4">
             <span x-text="selectedLocal.size"></span> files selected
+            <span class="text-gray-400">(</span
+            ><span
+              x-show="!selectedLocalSizesLoading"
+              x-text="fmtBytes(selectedLocalBytes)"
+            ></span
+            ><span x-show="selectedLocalSizesLoading">calculating size...</span
+            ><span class="text-gray-400">)</span>
+            <template
+              x-if="selectedMount && selectedMountDisk && !selectedLocalSizesLoading"
+            >
+              <span
+                class="block font-medium"
+                :class="selectedLocalOverCapacity ? 'text-red-400' : 'text-green-400'"
+                x-text="selectedLocalOverCapacity
+                  ? `${fmtBytes(selectedLocalBytes - Number(selectedMountDisk.free_bytes))} too much for the device`
+                  : `${fmtBytes(Number(selectedMountDisk.free_bytes) - selectedLocalBytes)} available after transfer`"
+              ></span>
+            </template>
+            <span
+              x-show="selectedMount && !selectedMountDisk && !selectedLocalSizesLoading"
+              class="block font-medium text-gray-400"
+              >checking device space...</span
+            >
           </span>
           <span class="flex-1"></span>
           <button
             @click="startTransfer()"
-            :disabled="(!device && !selectedMount) || isTransferring"
+            :disabled="(!device && !selectedMount) || isTransferring || (selectedMount && (selectedLocalSizesLoading || selectedLocalCapacityUnknown || selectedLocalOverCapacity))"
             class="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold bg-violet-600 hover:bg-violet-700 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <svg
@@ -397,10 +420,10 @@
           : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'"
           >
             <span
-              x-text="selectedMount && viewMode === 'folder' ? 'Browse' : 'Tracks'"
+              x-text="isDeviceSearchActive ? 'Search results' : (selectedMount && viewMode === 'folder' ? 'Folder view' : 'Tracks view')"
             ></span>
             <span
-              x-text="`(${deviceTracks.length > 0 ? deviceTracks.length : folderContents.files.length + folderContents.directories.length})`"
+              x-text="`(${isDeviceSearchActive ? filteredDeviceTracks.length : (selectedMount && viewMode === 'folder' ? folderContents.directories.length + folderContents.files.length : deviceTracks.length)})`"
             ></span>
           </button>
 
@@ -422,6 +445,30 @@
             class="flex items-center gap-1 px-2"
             x-show="activeDeviceTab === 'tracks'"
           >
+            <div class="flex items-center gap-1 mr-1">
+              <input
+                x-model="deviceSearch"
+                @input="ensureSearchLibraryLoaded()"
+                type="search"
+                placeholder="Search library"
+                aria-label="Search device library"
+                class="w-32 sm:w-44 px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs focus:outline-none"
+              />
+              <select
+                x-model="deviceFormat"
+                @change="ensureSearchLibraryLoaded()"
+                aria-label="Filter by format"
+                class="w-16 sm:w-20 px-1.5 py-0 rounded-md border-gray-600 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs focus:outline-none"
+              >
+                <option value="all">All</option>
+                <option value="mp3">MP3</option>
+                <option value="flac">FLAC</option>
+                <option value="ogg">OGG</option>
+                <option value="wav">WAV</option>
+                <option value="m4a">M4A</option>
+                <option value="aac">AAC</option>
+              </select>
+            </div>
             <!-- View mode toggle (mount only) -->
             <template x-if="selectedMount">
               <div
@@ -429,7 +476,7 @@
               >
                 <button
                   @click="switchViewMode('folder')"
-                  class="px-2 py-1 transition-colors"
+                  class="hover:cursor-pointer px-2 py-1 transition-colors"
                   :class="viewMode === 'folder'
                 ? 'bg-violet-600 text-white'
                 : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'"
@@ -439,7 +486,7 @@
                 </button>
                 <button
                   @click="switchViewMode('flat')"
-                  class="px-2 py-1 transition-colors"
+                  class="hover:cursor-pointer px-2 py-1 transition-colors"
                   :class="viewMode === 'flat'
                 ? 'bg-violet-600 text-white'
                 : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'"
@@ -467,7 +514,7 @@
             </button>
             <button
               @click="selectedMount && viewMode === 'folder' ? loadFolderContents(selectedMount.mount_path, folderPath) : (selectedMount ? loadMountTracks(selectedMount.mount_path) : loadDeviceTracks())"
-              class="w-7 h-7 rounded flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+              class="hover:cursor-pointer w-7 h-7 rounded flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
               title="Refresh"
               aria-label="Refresh"
             >
@@ -619,7 +666,7 @@
 
           <!-- ── FOLDER VIEW (mount only, default) ── -->
           <div
-            x-show="selectedMount && viewMode === 'folder' && !isLoadingDevice"
+            x-show="selectedMount && viewMode === 'folder' && !isDeviceSearchActive && !isLoadingDevice"
             class="flex flex-col h-full"
           >
             <!-- Breadcrumb -->
@@ -648,11 +695,11 @@
                     <path d="m3 10 9-7 9 7" />
                     <path d="M5 9v11h14V9" />
                   </svg>
-                  <span>Hem</span>
+                  <span>Home</span>
                 </button>
                 <template
-                  x-for="(part, i) in folderPath.split('/').filter(Boolean)"
-                  :key="i"
+                  x-for="(part, id) in folderPath.split('/').filter(Boolean)"
+                  :key="id"
                 >
                   <span class="flex items-center gap-1 shrink-0">
                     <svg
@@ -668,9 +715,9 @@
                       <path d="m9 18 6-6-6-6" />
                     </svg>
                     <button
-                      @click="navigateFolder(folderPath.split('/').slice(0, i + 1).join('/'))"
+                      @click="navigateFolder(folderPath.split('/').slice(0, id + 1).join('/'))"
                       class="px-1.5 py-0.5 rounded hover:cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors max-w-32 truncate"
-                      :class="i === folderPath.split('/').filter(Boolean).length - 1
+                      :class="id === folderPath.split('/').filter(Boolean).length - 1
                     ? 'text-violet-600 dark:text-violet-400 font-medium'
                     : 'text-gray-600 dark:text-gray-400'"
                       :title="part"
@@ -960,17 +1007,22 @@
           </div>
 
           <!-- ── FLAT VIEW (MTP or mount in flat mode) ── -->
-          <div x-show="!selectedMount || viewMode === 'flat'">
+          <div
+            x-show="isDeviceSearchActive || !selectedMount || viewMode === 'flat'"
+          >
             <!-- Empty device -->
             <div
-              x-show="(device || (selectedMount && viewMode === 'flat')) && !isLoadingDevice && deviceTracks.length === 0"
+              x-show="(device || (selectedMount && (viewMode === 'flat' || isDeviceSearchActive))) && !isLoadingDevice && !isLoadingSearchLibrary && filteredDeviceTracks.length === 0"
               class="flex flex-col items-center justify-center h-full gap-2 text-gray-400 dark:text-gray-600"
             >
-              <p class="text-sm">No tracks on the device</p>
+              <p
+                class="text-sm"
+                x-text="isDeviceSearchActive ? 'No tracks match your search' : 'No tracks on the device'"
+              ></p>
             </div>
 
             <!-- Track rows -->
-            <template x-for="track in deviceTracks" :key="track.id">
+            <template x-for="track in filteredDeviceTracks" :key="track.id">
               <div
                 @click="toggleDeviceTrack(track.id)"
                 @pointerenter="moveDevicePointer(track)"
@@ -980,10 +1032,10 @@
                   : selectedDevice.has(track.id) ? 'bg-violet-50 dark:bg-violet-900/20' : ''"
               >
                 <span
-                  class="text-gray-300 dark:text-gray-600 text-xs shrink-0 cursor-grab"
+                  class="p-3 text-gray-300 dark:text-gray-600 text-xs shrink-0 cursor-grab"
                   @pointerdown.stop.prevent="startDevicePointerDrag(track)"
                   title="Drag to reorder"
-                  >⋮⋮</span
+                  >⋮</span
                 >
                 <div
                   class="w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors"
@@ -1008,9 +1060,18 @@
                 </div>
 
                 <div
-                  class="w-8 h-8 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 text-xs shrink-0"
+                  class="w-8 h-8 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 text-xs shrink-0 overflow-hidden"
                 >
-                  ♪
+                  <template x-if="track.cover_art">
+                    <img
+                      :src="track.cover_art"
+                      class="w-full h-full object-cover"
+                      alt=""
+                    />
+                  </template>
+                  <template x-if="!track.cover_art">
+                    <span>♪</span>
+                  </template>
                 </div>
 
                 <div class="flex-1 min-w-0">
@@ -1021,6 +1082,11 @@
                   <p
                     class="truncate text-xs text-gray-400 dark:text-gray-500"
                     x-text="[track.artist, track.album].filter(Boolean).join(' · ')"
+                  ></p>
+                  <p
+                    x-show="isDeviceSearchActive && track.path"
+                    class="truncate text-[10px] text-gray-400 dark:text-gray-600"
+                    x-text="selectedMount ? track.id : track.filename"
                   ></p>
                 </div>
 
@@ -1200,7 +1266,7 @@
     <div
       x-show="transferNotice"
       x-cloak
-      class="fixed right-4 bottom-4 z-40 max-w-sm rounded-xl border border-emerald-200 dark:border-emerald-900/60 bg-white dark:bg-gray-900 px-4 py-3 shadow-lg text-sm text-emerald-700 dark:text-emerald-300"
+      class="fixed right-4 bottom-4 z-40 max-w-xl rounded-xl border border-emerald-200 dark:border-emerald-900/60 bg-white dark:bg-gray-900 px-4 py-3 shadow-lg text-sm text-emerald-700 dark:text-emerald-300"
       :class="transferNotice?.includes('fel') || transferNotice?.includes('avbruten')
         ? 'border-amber-200 dark:border-amber-900/60 text-amber-700 dark:text-amber-300'
         : 'border-emerald-200 dark:border-emerald-900/60 text-emerald-700 dark:text-emerald-300'"

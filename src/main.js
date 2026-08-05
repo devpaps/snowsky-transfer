@@ -77,12 +77,15 @@ Alpine.data('app', () => ({
   folderContents: { directories: [], files: [] },
   folderHistory:  [],        // stack of previous folder paths
   transferDestination: '',
+  deviceSearch:   '',
+  deviceFormat:   'all',
+  isLoadingSearchLibrary: false,
 
   // ── Disk usage
   selectedMountDisk: null,   // DiskUsage | null
 
   // ── Local files queue
-  localFiles: [],         // Array<{ path, name, ext, meta | null }>
+  localFiles: [],         // Array<{ path, name, ext, size, meta | null }>
   selectedLocal: new Set(),
   draggedLocalPath: null,
   dragOverLocalPath: null,
@@ -316,6 +319,32 @@ Alpine.data('app', () => ({
     }
   },
 
+  async ensureSearchLibraryLoaded() {
+    if (!this.selectedMount || this.deviceTracks.length || this.isLoadingSearchLibrary) return
+    this.isLoadingSearchLibrary = true
+    try {
+      await this.loadMountTracks(this.selectedMount.mount_path)
+    } finally {
+      this.isLoadingSearchLibrary = false
+    }
+  },
+
+  get isDeviceSearchActive() {
+    return this.deviceSearch.trim().length > 0 || this.deviceFormat !== 'all'
+  },
+
+  get filteredDeviceTracks() {
+    const query = this.deviceSearch.trim().toLowerCase()
+    return this.deviceTracks.filter(track => {
+      const format = String(track.filetype || track.filename?.split('.').pop() || '').toLowerCase()
+      if (this.deviceFormat !== 'all' && format !== this.deviceFormat) return false
+      if (!query) return true
+      return [track.title, track.artist, track.album, track.filename, track.path, track.id]
+        .filter(Boolean)
+        .some(value => String(value).toLowerCase().includes(query))
+    })
+  },
+
   async loadDiskUsage(path) {
     try {
       this.selectedMountDisk = await invoke('get_disk_usage', { mountPath: path })
@@ -521,13 +550,17 @@ Alpine.data('app', () => ({
       const name = path.split('/').pop()
       if (this.localFiles.some(f => f.path === path)) continue
 
-      const file = { path, name, ext, subPath, meta: null, loading: true }
+      const file = { path, name, ext, subPath, meta: null, size: null, loading: true }
       this.localFiles.push(file)
 
       invoke('get_local_metadata', { path }).then(meta => {
         file.meta    = meta
         file.loading = false
       }).catch(() => { file.loading = false })
+
+      invoke('get_local_file_size', { path }).then(size => {
+        file.size = Number(size)
+      }).catch(() => { file.size = 0 })
     }
   },
 
@@ -612,6 +645,26 @@ Alpine.data('app', () => ({
 
   get selectedLocalFiles() {
     return this.localFiles.filter(f => this.selectedLocal.has(f.path))
+  },
+
+  get selectedLocalBytes() {
+    return this.selectedLocalFiles.reduce((sum, file) => sum + (Number(file.size) || 0), 0)
+  },
+
+  get selectedLocalSizesLoading() {
+    return this.selectedLocalFiles.some(file => file.size === null || file.size === undefined)
+  },
+
+  get selectedLocalOverCapacity() {
+    return Boolean(
+      this.selectedMountDisk &&
+      !this.selectedLocalSizesLoading &&
+      this.selectedLocalBytes > Number(this.selectedMountDisk.free_bytes),
+    )
+  },
+
+  get selectedLocalCapacityUnknown() {
+    return Boolean(this.selectedMount && !this.selectedMountDisk)
   },
 
   async moveDeviceTrack(track, direction) {
@@ -701,11 +754,17 @@ Alpine.data('app', () => ({
     }
 
     if (this.selectedMount) {
-      const sizes = await Promise.all(files.map(file => invoke('get_local_file_size', { path: file.path })))
-      const required = sizes.reduce((sum, size) => sum + Number(size), 0)
-      const disk = await invoke('get_disk_usage', { mountPath: this.selectedMount.mount_path })
-      if (required > Number(disk.free_bytes)) {
-        window.alert(`Not enough space. Required: ${fmtBytes(required)}, available: ${fmtBytes(Number(disk.free_bytes))}.`)
+      if (this.selectedLocalSizesLoading) {
+        window.alert('Wait until the selected file sizes have loaded before transferring.')
+        return
+      }
+      if (this.selectedLocalCapacityUnknown) {
+        window.alert('Wait until the device storage information has loaded before transferring.')
+        return
+      }
+      if (this.selectedLocalOverCapacity) {
+        const excess = this.selectedLocalBytes - Number(this.selectedMountDisk.free_bytes)
+        window.alert(`Not enough space. You need ${fmtBytes(excess)} less space.`)
         return
       }
     }
@@ -807,6 +866,7 @@ Alpine.data('app', () => ({
       await this.loadDeviceTracks()
     } catch (e) {
       console.error('send_tracks error:', e)
+      this.transferNotice = `Could not start transfer: ${e}`
     } finally {
       this.isTransferring = false
       this.finishTransfer()
@@ -820,7 +880,8 @@ Alpine.data('app', () => ({
     this.transfers      = {}
     this.transferNotice = null
     clearTimeout(this.transferCloseTimer)
-    const dest          = this.selectedMount.mount_path + (this.transferDestination ? '/' + this.transferDestination : '')
+    const destination   = this.transferDestination || (this.viewMode === 'folder' ? this.folderPath : '')
+    const dest          = this.selectedMount.mount_path + (destination ? '/' + destination : '')
 
     // Preserve the order chosen in the local file queue.
     const files = [...rawFiles]
@@ -881,7 +942,7 @@ Alpine.data('app', () => ({
 
     // Refresh view after copy
     if (this.viewMode === 'folder') {
-      await this.loadFolderContents(this.selectedMount.mount_path, this.transferDestination || this.folderPath)
+      await this.loadFolderContents(this.selectedMount.mount_path, destination)
     } else {
       await this.loadMountTracks(this.selectedMount.mount_path)
     }
@@ -901,14 +962,15 @@ Alpine.data('app', () => ({
   finishTransfer() {
     const transfers = this.transferList
     const done = transfers.filter(t => t.status === 'done').length
-    const errors = transfers.filter(t => t.status === 'error').length
+    const failed = transfers.filter(t => t.status === 'error')
+    const errors = failed.length
     if (!transfers.length) return
     const cancelled = this.cancelTransferRequested
 
     this.transferNotice = cancelled
       ? `Transfer cancelled (${done} completed)`
       : errors
-      ? `Transfer completed with ${errors} error(s) (${done} succeeded)`
+      ? `Transfer failed for ${failed.map(t => `${t.filename}: ${t.error || 'unknown error'}`).join(' | ')}`
       : `${done} ${done === 1 ? 'file' : 'files'} transferred successfully`
 
     this.transferCloseTimer = setTimeout(() => {

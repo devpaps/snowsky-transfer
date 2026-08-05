@@ -31,6 +31,13 @@ mod ffi {
     pub type LIBMTP_error_number_t = c_uint;
     pub const LIBMTP_ERROR_NONE: LIBMTP_error_number_t = 0;
 
+    #[repr(C)]
+    pub struct LIBMTP_error_t {
+        pub errornumber: LIBMTP_error_number_t,
+        pub error_text: *mut c_char,
+        pub next: *mut LIBMTP_error_t,
+    }
+
     pub type LIBMTP_progressfunc_t =
         Option<unsafe extern "C" fn(u64, u64, *const c_void) -> c_int>;
 
@@ -152,6 +159,7 @@ mod ffi {
         pub fn LIBMTP_destroy_track_t(track: *mut LIBMTP_track_t);
 
         pub fn LIBMTP_Dump_Errorstack(device: *mut LIBMTP_mtpdevice_t);
+        pub fn LIBMTP_Get_Errorstack(device: *mut LIBMTP_mtpdevice_t) -> *mut LIBMTP_error_t;
         pub fn LIBMTP_Clear_Errorstack(device: *mut LIBMTP_mtpdevice_t);
 
         pub fn LIBMTP_Get_Friendlyname(device: *mut LIBMTP_mtpdevice_t) -> *mut c_char;
@@ -219,6 +227,21 @@ fn filetype_to_str(ft: ffi::LIBMTP_filetype_t) -> String {
         _                         => "Unknown",
     }
     .to_string()
+}
+
+fn take_error_stack(ptr: *mut ffi::LIBMTP_mtpdevice_t) -> String {
+    let mut messages = Vec::new();
+    unsafe {
+        let mut error = ffi::LIBMTP_Get_Errorstack(ptr);
+        while !error.is_null() {
+            if !(*error).error_text.is_null() {
+                messages.push(CStr::from_ptr((*error).error_text).to_string_lossy().into_owned());
+            }
+            error = (*error).next;
+        }
+        ffi::LIBMTP_Clear_Errorstack(ptr);
+    }
+    messages.join("; ")
 }
 
 // ─── Public types (serialised to JSON for the frontend) ──────────────────────
@@ -475,13 +498,11 @@ impl MtpManager {
         };
 
         if ret != 0 {
-            unsafe {
-                ffi::LIBMTP_Dump_Errorstack(ptr);
-                ffi::LIBMTP_Clear_Errorstack(ptr);
-            }
+            let detail = take_error_stack(ptr);
             return Err(AppError::Mtp(format!(
-                "Transfer failed for \"{}\"",
-                filename
+                "Transfer failed for \"{}\"{}",
+                filename,
+                if detail.is_empty() { String::new() } else { format!(": {detail}") },
             )));
         }
 

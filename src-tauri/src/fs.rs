@@ -350,7 +350,7 @@ pub fn list_directory(mount_root: &str, sub_path: &str) -> Result<FolderContents
                 file_count,
                 audio_size_bytes,
             });
-        } else if is_audio_ext(&path) {
+        } else if path.is_file() && is_audio_ext(&path) {
             let file_size = std::fs::metadata(&path)?.len();
             let meta = metadata::read(&path.to_string_lossy()).ok();
 
@@ -440,7 +440,7 @@ fn walk_audio_files(base: &Path, dir: &Path, tracks: &mut Vec<MountTrack>) -> Re
 fn is_audio_ext(path: &Path) -> bool {
     path.extension()
         .and_then(|e| e.to_str())
-        .map(|e| AUDIO_EXTS.contains(&e))
+        .map(|e| AUDIO_EXTS.iter().any(|ext| ext.eq_ignore_ascii_case(e)))
         .unwrap_or(false)
 }
 
