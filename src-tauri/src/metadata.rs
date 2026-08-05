@@ -1,26 +1,26 @@
 //! Read and write audio metadata (tags + cover art) using lofty.
 
-use std::path::Path;
 use base64::Engine;
 use lofty::config::WriteOptions;
 use lofty::file::TaggedFileExt;
 use lofty::picture::{MimeType, Picture, PictureType};
 use lofty::prelude::*;
 use lofty::probe::Probe;
+use std::path::Path;
 
 use crate::error::AppError;
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Default)]
 pub struct TrackMetadata {
-    pub title:        Option<String>,
-    pub artist:       Option<String>,
-    pub album:        Option<String>,
-    pub genre:        Option<String>,
-    pub year:         Option<u32>,
+    pub title: Option<String>,
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    pub genre: Option<String>,
+    pub year: Option<u32>,
     pub track_number: Option<u32>,
-    pub duration_ms:  u32,
+    pub duration_ms: u32,
     /// JPEG/PNG as a base64 data-URL, e.g. "data:image/jpeg;base64,..."
-    pub cover_art:    Option<String>,
+    pub cover_art: Option<String>,
 }
 
 /// Read all metadata from an audio file.
@@ -42,14 +42,14 @@ pub fn read(path: &str) -> Result<TrackMetadata, AppError> {
                 .iter()
                 .find(|p| p.pic_type() == PictureType::CoverFront)
                 .or_else(|| t.pictures().first())
-                .and_then(|p| {
+                .map(|p| {
                     let mime = match p.mime_type() {
                         Some(MimeType::Jpeg) => "image/jpeg",
-                        Some(MimeType::Png)  => "image/png",
-                        _                    => "image/jpeg",
+                        Some(MimeType::Png) => "image/png",
+                        _ => "image/jpeg",
                     };
                     let b64 = base64::engine::general_purpose::STANDARD.encode(p.data());
-                    Some(format!("data:{mime};base64,{b64}"))
+                    format!("data:{mime};base64,{b64}")
                 });
 
             (
@@ -96,12 +96,24 @@ pub fn write(path: &str, meta: &TrackMetadata) -> Result<(), AppError> {
             .ok_or_else(|| AppError::Metadata("No writable tag found".into()))?,
     };
 
-    if let Some(v) = &meta.title        { tag.set_title(v.clone()); }
-    if let Some(v) = &meta.artist       { tag.set_artist(v.clone()); }
-    if let Some(v) = &meta.album        { tag.set_album(v.clone()); }
-    if let Some(v) = &meta.genre        { tag.set_genre(v.clone()); }
-    if let Some(v) = meta.year          { tag.set_year(v); }
-    if let Some(v) = meta.track_number  { tag.set_track(v); }
+    if let Some(v) = &meta.title {
+        tag.set_title(v.clone());
+    }
+    if let Some(v) = &meta.artist {
+        tag.set_artist(v.clone());
+    }
+    if let Some(v) = &meta.album {
+        tag.set_album(v.clone());
+    }
+    if let Some(v) = &meta.genre {
+        tag.set_genre(v.clone());
+    }
+    if let Some(v) = meta.year {
+        tag.set_year(v);
+    }
+    if let Some(v) = meta.track_number {
+        tag.set_track(v);
+    }
 
     // Cover art: decode the base64 data-URL if provided.
     if let Some(data_url) = &meta.cover_art {
