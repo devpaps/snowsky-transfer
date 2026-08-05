@@ -1,0 +1,1310 @@
+<!doctype html>
+<html lang="sv" class="h-full">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Snowsky Transfer</title>
+    <script type="module" src="/src/main.js"></script>
+  </head>
+
+  <body
+    x-data="app"
+    x-init="init()"
+    class="h-full flex flex-col bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 text-sm select-none overflow-hidden"
+  >
+    <!-- ══════════════════════════════════════════════════════════════
+     TOP BAR
+═══════════════════════════════════════════════════════════════ -->
+    <header
+      class="flex items-center justify-between px-4 h-12 border-b border-gray-200 dark:border-gray-800 shrink-0"
+    >
+      <!-- Logo -->
+      <div class="flex items-center gap-2 font-semibold tracking-tight">
+        <svg
+          class="w-5 h-5 text-violet-500"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+        >
+          <path
+            d="M12 3a9 9 0 1 0 0 18A9 9 0 0 0 12 3zm0 2a7 7 0 1 1 0 14A7 7 0 0 1 12 5zm-1 3v6l5 3-1 1.7-5.5-3.3A1 1 0 0 1 9 14V8h2z"
+          />
+        </svg>
+        Snowsky Transfer
+      </div>
+
+      <!-- Device status -->
+      <div class="flex items-center gap-3">
+        <!-- MTP device connected -->
+        <template x-if="device">
+          <div class="flex items-center gap-2">
+            <span
+              class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"
+            ></span>
+            <span
+              class="font-medium"
+              x-text="device.name || device.model"
+            ></span>
+            <template x-if="device.battery_level !== null">
+              <span class="text-xs text-gray-400 dark:text-gray-500">
+                ⚡<span x-text="device.battery_level"></span>%
+              </span>
+            </template>
+            <button
+              @click="disconnectDevice()"
+              class="text-xs text-gray-400 hover:text-red-500 transition-colors px-1"
+              title="Koppla ifrån"
+            >
+              ✕
+            </button>
+          </div>
+        </template>
+
+        <!-- Mount device connected -->
+        <template x-if="selectedMount">
+          <div class="flex items-center gap-2">
+            <span
+              class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"
+            ></span>
+            <span class="font-medium" x-text="selectedMount.name"></span>
+            <span
+              class="text-xs text-gray-400"
+              x-text="`(${selectedMount.track_count} filer)`"
+            ></span>
+            <template x-if="selectedMountDisk">
+              <span
+                class="text-xs text-gray-400"
+                x-text="`${fmtBytes(selectedMountDisk.used_bytes)} / ${fmtBytes(selectedMountDisk.total_bytes)}`"
+              ></span>
+            </template>
+            <button
+              @click="disconnectMount()"
+              class="text-xs text-gray-400 hover:text-red-500 transition-colors px-1"
+              title="Koppla ifrån"
+            >
+              ✕
+            </button>
+          </div>
+        </template>
+
+        <!-- Scan button switches label based on state -->
+        <button
+          @click="scanDevice()"
+          :disabled="isConnecting || isScanningMounts"
+          class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium hover:cursor-pointer bg-violet-600 hover:bg-violet-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <template x-if="isConnecting || isScanningMounts">
+            <svg
+              class="w-3.5 h-3.5 animate-spin"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <circle cx="12" cy="12" r="10" stroke-opacity=".3" />
+              <path d="M12 2a10 10 0 0 1 10 10" />
+            </svg>
+          </template>
+          <span
+            x-text="device || selectedMount ? 'Skanna igen' : (isConnecting || isScanningMounts ? 'Söker…' : 'Anslut enhet')"
+          ></span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ══════════════════════════════════════════════════════════════
+     MAIN LAYOUT — split pane
+═══════════════════════════════════════════════════════════════ -->
+    <main class="flex flex-1 min-h-0">
+      <!-- ── LEFT: Local files ────────────────────────────────── -->
+      <section
+        class="w-1/2 flex flex-col border-r border-gray-200 dark:border-gray-800 min-h-0"
+      >
+        <!-- Toolbar -->
+        <div
+          class="flex items-center gap-2 px-3 py-2 border-b border-gray-200 dark:border-gray-800 shrink-0"
+        >
+          <span
+            class="font-semibold text-xs uppercase tracking-widest text-gray-400"
+            >Lokala filer</span
+          >
+          <span class="flex-1"></span>
+          <button
+            @click="pickFiles()"
+            class="hover:cursor-pointer px-2.5 py-1 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+          >
+            + Lägg till
+          </button>
+          <button
+            @click="selectAllLocal()"
+            x-show="localFiles.length > 0"
+            class="px-2.5 py-1 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+          >
+            <span
+              x-text="selectedLocal.size === localFiles.length ? 'Avmarkera allt' : 'Välj alla'"
+            ></span>
+          </button>
+          <button
+            @click="clearLocalFiles()"
+            x-show="localFiles.length > 0"
+            class="px-2.5 py-1 rounded-md text-xs font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+          >
+            Rensa
+          </button>
+        </div>
+
+        <!-- Drop zone / file list -->
+        <div
+          class="flex-1 overflow-y-auto transition-all"
+          :class="isDragging ? 'drop-target-active' : ''"
+        >
+          <!-- Empty state -->
+          <div
+            x-show="localFiles.length === 0"
+            class="flex flex-col items-center justify-center h-full gap-3 text-gray-400 dark:text-gray-600 pointer-events-none"
+          >
+            <svg
+              class="w-10 h-10"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M9 13h6m-3-3v6m5 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z"
+              />
+            </svg>
+            <p class="text-sm font-medium">Dra & släpp ljudfiler hit</p>
+            <p class="text-xs">MP3 · FLAC · OGG · WAV · M4A · AAC</p>
+          </div>
+
+          <!-- File rows -->
+          <div x-show="localFiles.length > 0">
+            <template x-for="file in localFiles" :key="file.path">
+              <div
+                @click="toggleLocalFile(file.path)"
+                class="flex items-center gap-2 px-3 py-2 cursor-pointer border-b border-gray-100 dark:border-gray-800/60 hover:bg-gray-50 dark:hover:bg-gray-900/40 transition-colors"
+                :class="selectedLocal.has(file.path) ? 'bg-violet-50 dark:bg-violet-900/20' : ''"
+              >
+                <!-- Checkbox -->
+                <div
+                  class="w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors"
+                  :class="selectedLocal.has(file.path)
+                ? 'bg-violet-600 border-violet-600 text-white'
+                : 'border-gray-300 dark:border-gray-600'"
+                >
+                  <svg
+                    x-show="selectedLocal.has(file.path)"
+                    class="w-2.5 h-2.5"
+                    viewBox="0 0 10 10"
+                    fill="currentColor"
+                  >
+                    <path
+                      d="M1.5 5l2.5 2.5 4.5-4.5"
+                      stroke="white"
+                      stroke-width="1.5"
+                      fill="none"
+                      stroke-linecap="round"
+                    />
+                  </svg>
+                </div>
+
+                <!-- Cover art -->
+                <div
+                  class="w-8 h-8 rounded bg-gray-100 dark:bg-gray-800 shrink-0 overflow-hidden"
+                >
+                  <template x-if="file.meta?.cover_art">
+                    <img
+                      :src="file.meta.cover_art"
+                      class="w-full h-full object-cover"
+                    />
+                  </template>
+                  <template x-if="!file.meta?.cover_art">
+                    <div
+                      class="w-full h-full flex items-center justify-center text-gray-400 text-xs"
+                    >
+                      ♪
+                    </div>
+                  </template>
+                </div>
+
+                <!-- Info -->
+                <div class="flex-1 min-w-0">
+                  <p
+                    class="truncate font-medium text-xs"
+                    x-text="file.meta?.title || file.name.replace(/\.[^.]+$/, '')"
+                  ></p>
+                  <p
+                    class="truncate text-xs text-gray-400 dark:text-gray-500"
+                    x-text="[file.meta?.artist, file.meta?.album].filter(Boolean).join(' · ') || file.name"
+                  ></p>
+                  <p
+                    x-show="file.subPath"
+                    class="truncate text-[10px] text-gray-400 dark:text-gray-600"
+                    x-text="file.subPath.replace('/' + file.name, '')"
+                  ></p>
+                </div>
+
+                <!-- Duration + format -->
+                <div class="flex items-center gap-2 shrink-0 text-right">
+                  <span
+                    class="text-xs text-gray-400"
+                    x-text="file.meta ? fmtDuration(file.meta.duration_ms) : ''"
+                  ></span>
+                  <span
+                    class="text-[10px] font-mono uppercase px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500"
+                    x-text="file.ext"
+                  ></span>
+                </div>
+
+                <!-- Actions (stop propagation so row toggle doesn't fire) -->
+                <div class="flex items-center gap-1 shrink-0" @click.stop>
+                  <!-- Preview -->
+                  <button
+                    @click="togglePreview(file.path)"
+                    class="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-violet-500 transition-colors"
+                    :title="previewPath === file.path && isPlaying ? 'Stoppa' : 'Förhandsgranska'"
+                  >
+                    <svg
+                      x-show="!(previewPath === file.path && isPlaying)"
+                      class="w-3.5 h-3.5"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                    >
+                      <polygon points="5,3 19,12 5,21" />
+                    </svg>
+                    <svg
+                      x-show="previewPath === file.path && isPlaying"
+                      class="w-3.5 h-3.5"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                    >
+                      <rect x="6" y="4" width="4" height="16" />
+                      <rect x="14" y="4" width="4" height="16" />
+                    </svg>
+                  </button>
+                  <!-- Edit metadata -->
+                  <button
+                    @click="openMetaEditor(file)"
+                    class="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-violet-500 transition-colors"
+                    title="Redigera metadata"
+                  >
+                    <svg
+                      class="w-3.5 h-3.5"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path
+                        d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
+                      />
+                      <path
+                        d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
+                      />
+                    </svg>
+                  </button>
+                  <!-- Remove -->
+                  <button
+                    @click="removeLocalFile(file.path)"
+                    class="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors"
+                    title="Ta bort från listan"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Transfer footer -->
+        <div
+          x-show="selectedLocal.size > 0"
+          class="flex items-center gap-3 px-3 py-2 border-t border-gray-200 dark:border-gray-800 shrink-0 bg-white dark:bg-gray-950"
+        >
+          <span class="text-xs text-gray-500">
+            <span x-text="selectedLocal.size"></span> filer valda
+          </span>
+          <span class="flex-1"></span>
+          <button
+            @click="startTransfer()"
+            :disabled="(!device && !selectedMount) || isTransferring"
+            class="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold bg-violet-600 hover:bg-violet-700 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <svg
+              class="w-3.5 h-3.5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+            >
+              <path
+                d="M5 12h14M12 5l7 7-7 7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+            Överför till enhet
+          </button>
+        </div>
+      </section>
+
+      <!-- ── RIGHT: Device ────────────────────────────────────── -->
+      <section class="w-1/2 flex flex-col min-h-0">
+        <!-- Tab bar -->
+        <div
+          class="flex border-b border-gray-200 dark:border-gray-800 shrink-0"
+        >
+          <button
+            @click="activeDeviceTab = 'tracks'"
+            class="px-4 py-2 text-xs font-medium border-b-2 transition-colors hover:cursor-pointer"
+            :class="activeDeviceTab === 'tracks'
+          ? 'border-violet-600 text-violet-600 dark:text-violet-400'
+          : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'"
+          >
+            <span
+              x-text="selectedMount && viewMode === 'folder' ? 'Bläddra' : 'Låtar'"
+            ></span>
+            <span
+              x-text="`(${deviceTracks.length > 0 ? deviceTracks.length : folderContents.files.length + folderContents.directories.length})`"
+            ></span>
+          </button>
+
+          <button
+            @click="activeDeviceTab = 'playlists'"
+            x-show="!selectedMount"
+            class="px-4 py-2 text-xs font-medium border-b-2 transition-colors hover:cursor-pointer"
+            :class="activeDeviceTab === 'playlists'
+          ? 'border-violet-600 text-violet-600 dark:text-violet-400'
+          : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'"
+          >
+            Spellistor (<span x-text="devicePlaylists.length"></span>)
+          </button>
+
+          <span class="flex-1"></span>
+
+          <!-- Device toolbar -->
+          <div
+            class="flex items-center gap-1 px-2"
+            x-show="activeDeviceTab === 'tracks'"
+          >
+            <!-- View mode toggle (mount only) -->
+            <template x-if="selectedMount">
+              <div
+                class="flex items-center gap-1 mr-1 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden text-xs"
+              >
+                <button
+                  @click="switchViewMode('folder')"
+                  class="px-2 py-1 transition-colors"
+                  :class="viewMode === 'folder'
+                ? 'bg-violet-600 text-white'
+                : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'"
+                  title="Mappvy"
+                >
+                  📁
+                </button>
+                <button
+                  @click="switchViewMode('flat')"
+                  class="px-2 py-1 transition-colors"
+                  :class="viewMode === 'flat'
+                ? 'bg-violet-600 text-white'
+                : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'"
+                  title="Listvy"
+                >
+                  ☰
+                </button>
+              </div>
+            </template>
+
+            <button
+              x-show="selectedDevice.size > 0 && !selectedMount"
+              @click="openNewPlaylist()"
+              class="px-2.5 py-1 text-xs rounded-md bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              title="Skapa spellista av valda"
+            >
+              + Spellista
+            </button>
+            <button
+              x-show="selectedDevice.size > 0"
+              @click="deleteSelectedDeviceTracks()"
+              class="px-2.5 py-1 text-xs rounded-md text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+            >
+              Ta bort
+            </button>
+            <button
+              @click="selectedMount && viewMode === 'folder' ? loadFolderContents(selectedMount.mount_path, folderPath) : (selectedMount ? loadMountTracks(selectedMount.mount_path) : loadDeviceTracks())"
+              class="w-7 h-7 rounded flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+              title="Uppdatera"
+              aria-label="Uppdatera"
+            >
+              <svg
+                class="w-3.5 h-3.5"
+                :class="isLoadingDevice ? 'animate-spin' : ''"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M21 12a9 9 0 0 0-15.2-6.5L3 8" />
+                <path d="M3 3v5h5" />
+                <path d="M3 12a9 9 0 0 0 15.2 6.5L21 16" />
+                <path d="M21 21v-5h-5" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Tracks tab -->
+        <div
+          x-show="activeDeviceTab === 'tracks'"
+          class="flex-1 overflow-y-auto"
+        >
+          <!-- Not connected — show detected mount devices -->
+          <div
+            x-show="!device && !selectedMount && mountDevices.length === 0 && !isScanningMounts"
+            class="flex flex-col items-center justify-center h-full gap-2 text-gray-400 dark:text-gray-600"
+          >
+            <svg
+              class="w-10 h-10"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.5"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4M9 3h6m-6 0v4m6-4v4m-6 0H7m2 0h2"
+              />
+            </svg>
+            <p class="text-sm">Anslut din Snowsky Echo Mini</p>
+          </div>
+
+          <!-- Detected mount devices list -->
+          <div
+            x-show="mountDevices.length > 0 && !selectedMount"
+            class="p-3 space-y-2"
+          >
+            <p
+              class="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2"
+            >
+              Upptäckta enheter (USB-lagring)
+            </p>
+            <template x-for="md in mountDevices" :key="md.mount_path">
+              <div
+                @click="selectMountDevice(md.mount_path)"
+                class="flex items-center gap-3 px-3 py-3 rounded-xl cursor-pointer border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900/40 transition-colors"
+              >
+                <div
+                  class="w-8 h-8 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center text-violet-500 shrink-0"
+                >
+                  <svg
+                    class="w-4 h-4"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path
+                      d="M22 12H2M12 2v20M2 12l10-10M22 12l-10 10"
+                      stroke-linecap="round"
+                    />
+                    <rect
+                      x="4"
+                      y="4"
+                      width="16"
+                      height="16"
+                      rx="2"
+                      stroke-linecap="round"
+                    />
+                  </svg>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <p class="font-medium text-sm truncate" x-text="md.name"></p>
+                  <p
+                    class="text-xs text-gray-400"
+                    x-text="`${md.track_count} ljudfiler`"
+                  ></p>
+                  <p class="text-xs text-gray-400" x-text="md.mount_path"></p>
+                </div>
+                <svg
+                  class="w-4 h-4 text-gray-400 shrink-0"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    d="M9 18l6-6-6-6"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </div>
+            </template>
+          </div>
+
+          <!-- Scanning mounts spinner -->
+          <div
+            x-show="isScanningMounts"
+            class="flex items-center justify-center h-full text-gray-400"
+          >
+            <svg
+              class="w-5 h-5 animate-spin"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <circle cx="12" cy="12" r="10" stroke-opacity=".25" />
+              <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round" />
+            </svg>
+            <span class="ml-2 text-sm">Söker efter anslutna enheter…</span>
+          </div>
+
+          <!-- Loading -->
+          <div
+            x-show="(device || selectedMount) && isLoadingDevice"
+            class="flex items-center justify-center h-full text-gray-400"
+          >
+            <svg
+              class="w-5 h-5 animate-spin"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <circle cx="12" cy="12" r="10" stroke-opacity=".25" />
+              <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round" />
+            </svg>
+            <span class="ml-2 text-sm">Läser in…</span>
+          </div>
+
+          <!-- ── FOLDER VIEW (mount only, default) ── -->
+          <div
+            x-show="selectedMount && viewMode === 'folder' && !isLoadingDevice"
+            class="flex flex-col h-full"
+          >
+            <!-- Breadcrumb -->
+            <div
+              class="flex items-center gap-1 px-3 py-3.5 border-b border-gray-200 dark:border-gray-800 text-xs shrink-0 min-w-0"
+            >
+              <div
+                class="flex flex-1 items-center gap-1 min-w-0 overflow-x-auto whitespace-nowrap"
+              >
+                <button
+                  @click="navigateFolder('')"
+                  class="hover:cursor-pointer flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors font-medium shrink-0"
+                  :title="selectedMount?.name || 'Enhet'"
+                  aria-label="Gå till enhetens startmapp"
+                >
+                  <svg
+                    class="w-3.5 h-3.5"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="m3 10 9-7 9 7" />
+                    <path d="M5 9v11h14V9" />
+                  </svg>
+                  <span>Hem</span>
+                </button>
+                <template
+                  x-for="(part, i) in folderPath.split('/').filter(Boolean)"
+                  :key="i"
+                >
+                  <span class="flex items-center gap-1 shrink-0">
+                    <svg
+                      class="w-3 h-3 text-gray-300 dark:text-gray-600"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="m9 18 6-6-6-6" />
+                    </svg>
+                    <button
+                      @click="navigateFolder(folderPath.split('/').slice(0, i + 1).join('/'))"
+                      class="px-1.5 py-0.5 rounded hover:cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors max-w-32 truncate"
+                      :class="i === folderPath.split('/').filter(Boolean).length - 1
+                    ? 'text-violet-600 dark:text-violet-400 font-medium'
+                    : 'text-gray-600 dark:text-gray-400'"
+                      :title="part"
+                      x-text="part"
+                    ></button>
+                  </span>
+                </template>
+              </div>
+              <span class="flex-1"></span>
+              <button
+                @click="navigateFolderUp()"
+                x-show="folderContents.parent_rel !== null"
+                class="flex items-center gap-1 px-2 py-0.5 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                <svg
+                  class="w-3.5 h-3.5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                >
+                  <path
+                    d="M5 12h14M12 5l-7 7 7 7"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+                Upp
+              </button>
+            </div>
+
+            <!-- Storage bar -->
+            <template x-if="selectedMountDisk">
+              <div
+                class="px-3 py-2 border-b border-gray-200 dark:border-gray-800 shrink-0"
+              >
+                <div class="flex items-center gap-2">
+                  <div
+                    class="flex-1 h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden"
+                  >
+                    <div
+                      class="h-full rounded-full transition-all duration-500"
+                      :class="(selectedMountDisk.used_bytes / selectedMountDisk.total_bytes) > 0.9
+                    ? 'bg-red-500' : (selectedMountDisk.used_bytes / selectedMountDisk.total_bytes) > 0.7
+                    ? 'bg-amber-500' : 'bg-violet-500'"
+                      :style="`width:${(selectedMountDisk.used_bytes / selectedMountDisk.total_bytes * 100).toFixed(1)}%`"
+                    ></div>
+                  </div>
+                  <span
+                    class="text-xs text-gray-500 shrink-0 whitespace-nowrap"
+                    x-text="`${fmtBytes(selectedMountDisk.used_bytes)} / ${fmtBytes(selectedMountDisk.total_bytes)}`"
+                  >
+                  </span>
+                </div>
+              </div>
+            </template>
+
+            <!-- Select-all bar -->
+            <div
+              x-show="folderContents.files.length > 0 || folderContents.directories.length > 0"
+              class="flex items-center gap-2 px-3 py-1.5 border-b border-gray-200 dark:border-gray-800 shrink-0"
+            >
+              <button
+                @click="selectAllFolderFiles()"
+                x-show="folderContents.files.length > 0"
+                class="text-xs font-medium text-violet-600 dark:text-violet-400 hover:text-violet-700 transition-colors hover:cursor-pointer"
+              >
+                <span
+                  x-text="folderContents.files.every(f => selectedDevice.has(f.id)) ? 'Avmarkera alla' : 'Välj alla'"
+                ></span>
+              </button>
+              <span class="flex-1"></span>
+              <span
+                class="text-xs text-gray-400"
+                x-show="selectedDevice.size > 0"
+                x-text="`${selectedDevice.size} valda`"
+              ></span>
+            </div>
+
+            <!-- Folder contents -->
+            <div class="flex-1 overflow-y-auto">
+              <!-- Directories -->
+              <template
+                x-for="dir in folderContents.directories"
+                :key="dir.rel_path"
+              >
+                <div
+                  @click="navigateFolder(dir.rel_path)"
+                  class="flex items-center gap-2 px-3 py-2.5 cursor-pointer border-b border-gray-100 dark:border-gray-800/60 hover:bg-gray-50 dark:hover:bg-gray-900/40 transition-colors group"
+                >
+                  <div
+                    class="w-8 h-8 rounded bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-500 shrink-0"
+                  >
+                    <svg
+                      class="w-4 h-4"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path
+                        d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"
+                      />
+                    </svg>
+                  </div>
+                  <div class="flex-1 min-w-0">
+                    <p
+                      class="truncate text-sm font-medium"
+                      x-text="dir.name"
+                    ></p>
+                    <p
+                      class="text-xs text-gray-400"
+                      x-text="`${dir.file_count} ljudfiler · ${fmtBytes(dir.audio_size_bytes)}`"
+                    ></p>
+                  </div>
+                  <button
+                    @click.stop="deleteFolder(dir.rel_path)"
+                    class="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 shrink-0"
+                    title="Ta bort mapp"
+                  >
+                    <svg
+                      class="w-3.5 h-3.5"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                    >
+                      <path
+                        d="M19 7l-.867 12.142A2 2 0 0 1 16.138 21H7.862a2 2 0 0 1-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v3M4 7h16"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                      />
+                    </svg>
+                  </button>
+                  <svg
+                    class="w-4 h-4 text-gray-400 shrink-0"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                  >
+                    <path
+                      d="M9 18l6-6-6-6"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </div>
+              </template>
+
+              <!-- Files -->
+              <template x-for="track in folderContents.files" :key="track.id">
+                <div
+                  @click="toggleDeviceTrack(track.id)"
+                  class="flex items-center gap-2 px-3 py-2 cursor-pointer border-b border-gray-100 dark:border-gray-800/60 hover:bg-gray-50 dark:hover:bg-gray-900/40 transition-colors"
+                  :class="selectedDevice.has(track.id) ? 'bg-violet-50 dark:bg-violet-900/20' : ''"
+                >
+                  <div
+                    class="w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors"
+                    :class="selectedDevice.has(track.id)
+                  ? 'bg-violet-600 border-violet-600 text-white'
+                  : 'border-gray-300 dark:border-gray-600'"
+                  >
+                    <svg
+                      x-show="selectedDevice.has(track.id)"
+                      class="w-2.5 h-2.5"
+                      viewBox="0 0 10 10"
+                      fill="currentColor"
+                    >
+                      <path
+                        d="M1.5 5l2.5 2.5 4.5-4.5"
+                        stroke="white"
+                        stroke-width="1.5"
+                        fill="none"
+                        stroke-linecap="round"
+                      />
+                    </svg>
+                  </div>
+
+                  <div
+                    class="w-8 h-8 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 text-xs shrink-0"
+                  >
+                    <template x-if="track.cover_art">
+                      <img
+                        :src="track.cover_art"
+                        class="w-full h-full object-cover rounded"
+                      />
+                    </template>
+                    <template x-if="!track.cover_art">
+                      <span>♪</span>
+                    </template>
+                  </div>
+
+                  <div class="flex-1 min-w-0">
+                    <p
+                      class="truncate font-medium text-xs"
+                      x-text="track.title || track.path.split('/').pop()"
+                    ></p>
+                    <p
+                      class="truncate text-xs text-gray-400 dark:text-gray-500"
+                      x-text="[track.artist, track.album].filter(Boolean).join(' · ') || ''"
+                    ></p>
+                  </div>
+
+                  <div class="flex items-center gap-2 shrink-0">
+                    <!-- Preview button (mount tracks only) -->
+                    <button
+                      x-show="track.path"
+                      @click.stop="togglePreview(track.path)"
+                      class="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-violet-500 transition-colors"
+                      :title="previewPath === track.path && isPlaying ? 'Stoppa' : 'Förhandsgranska'"
+                    >
+                      <svg
+                        x-show="!(previewPath === track.path && isPlaying)"
+                        class="w-3.5 h-3.5"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                      >
+                        <polygon points="5,3 19,12 5,21" />
+                      </svg>
+                      <svg
+                        x-show="previewPath === track.path && isPlaying"
+                        class="w-3.5 h-3.5"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                      >
+                        <rect x="6" y="4" width="4" height="16" />
+                        <rect x="14" y="4" width="4" height="16" />
+                      </svg>
+                    </button>
+                    <span
+                      class="text-xs text-gray-400"
+                      x-text="fmtDuration(track.duration_ms)"
+                    ></span>
+                    <span
+                      class="text-[10px] font-mono uppercase px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500"
+                      x-text="track.filetype"
+                    ></span>
+                  </div>
+                </div>
+              </template>
+
+              <!-- Empty folder -->
+              <div
+                x-show="folderContents.directories.length === 0 && folderContents.files.length === 0"
+                class="flex flex-col items-center justify-center h-full gap-2 text-gray-400 dark:text-gray-600"
+              >
+                <p class="text-sm">Tom mapp</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- ── FLAT VIEW (MTP or mount in flat mode) ── -->
+          <div x-show="!selectedMount || viewMode === 'flat'">
+            <!-- Empty device -->
+            <div
+              x-show="(device || (selectedMount && viewMode === 'flat')) && !isLoadingDevice && deviceTracks.length === 0"
+              class="flex flex-col items-center justify-center h-full gap-2 text-gray-400 dark:text-gray-600"
+            >
+              <p class="text-sm">Inga låtar på enheten</p>
+            </div>
+
+            <!-- Track rows -->
+            <template x-for="track in deviceTracks" :key="track.id">
+              <div
+                @click="toggleDeviceTrack(track.id)"
+                class="flex items-center gap-2 px-3 py-2 cursor-pointer border-b border-gray-100 dark:border-gray-800/60 hover:bg-gray-50 dark:hover:bg-gray-900/40 transition-colors"
+                :class="selectedDevice.has(track.id) ? 'bg-violet-50 dark:bg-violet-900/20' : ''"
+              >
+                <div
+                  class="w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors"
+                  :class="selectedDevice.has(track.id)
+                ? 'bg-violet-600 border-violet-600 text-white'
+                : 'border-gray-300 dark:border-gray-600'"
+                >
+                  <svg
+                    x-show="selectedDevice.has(track.id)"
+                    class="w-2.5 h-2.5"
+                    viewBox="0 0 10 10"
+                    fill="currentColor"
+                  >
+                    <path
+                      d="M1.5 5l2.5 2.5 4.5-4.5"
+                      stroke="white"
+                      stroke-width="1.5"
+                      fill="none"
+                      stroke-linecap="round"
+                    />
+                  </svg>
+                </div>
+
+                <div
+                  class="w-8 h-8 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 text-xs shrink-0"
+                >
+                  ♪
+                </div>
+
+                <div class="flex-1 min-w-0">
+                  <p
+                    class="truncate font-medium text-xs"
+                    x-text="track.title || track.filename || track.path?.split('/').pop() || track.id"
+                  ></p>
+                  <p
+                    class="truncate text-xs text-gray-400 dark:text-gray-500"
+                    x-text="[track.artist, track.album].filter(Boolean).join(' · ')"
+                  ></p>
+                </div>
+
+                <div class="flex items-center gap-2 shrink-0">
+                  <!-- Preview button (mount tracks only) -->
+                  <button
+                    x-show="track.path"
+                    @click.stop="togglePreview(track.path)"
+                    class="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-violet-500 transition-colors"
+                    :title="previewPath === track.path && isPlaying ? 'Stoppa' : 'Förhandsgranska'"
+                  >
+                    <svg
+                      x-show="!(previewPath === track.path && isPlaying)"
+                      class="w-3.5 h-3.5"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                    >
+                      <polygon points="5,3 19,12 5,21" />
+                    </svg>
+                    <svg
+                      x-show="previewPath === track.path && isPlaying"
+                      class="w-3.5 h-3.5"
+                      viewBox="0 0 24 24"
+                      fill="currentColor"
+                    >
+                      <rect x="6" y="4" width="4" height="16" />
+                      <rect x="14" y="4" width="4" height="16" />
+                    </svg>
+                  </button>
+                  <span
+                    class="text-xs text-gray-400"
+                    x-text="fmtDuration(track.duration_ms)"
+                  ></span>
+                  <span
+                    class="text-[10px] font-mono uppercase px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500"
+                    x-text="track.filetype"
+                  ></span>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Playlists tab -->
+        <div
+          x-show="activeDeviceTab === 'playlists'"
+          class="flex-1 overflow-y-auto"
+        >
+          <div
+            x-show="devicePlaylists.length === 0"
+            class="flex items-center justify-center h-full text-gray-400 dark:text-gray-600 text-sm"
+          >
+            Inga spellistor
+          </div>
+          <template x-for="pl in devicePlaylists" :key="pl.id">
+            <div
+              class="flex items-center gap-3 px-3 py-3 border-b border-gray-100 dark:border-gray-800/60 hover:bg-gray-50 dark:hover:bg-gray-900/40"
+            >
+              <div
+                class="w-8 h-8 rounded bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center text-violet-500 text-xs shrink-0"
+              >
+                ☰
+              </div>
+              <div class="flex-1 min-w-0">
+                <p class="truncate font-medium text-xs" x-text="pl.name"></p>
+                <p
+                  class="text-xs text-gray-400"
+                  x-text="`${pl.track_ids.length} låtar`"
+                ></p>
+              </div>
+              <button
+                @click="deletePlaylist(pl.id)"
+                class="text-xs text-gray-400 hover:text-red-500 transition-colors px-1"
+              >
+                ✕
+              </button>
+            </div>
+          </template>
+        </div>
+      </section>
+    </main>
+
+    <!-- ══════════════════════════════════════════════════════════════
+     TRANSFER PROGRESS FOOTER
+═══════════════════════════════════════════════════════════════ -->
+    <div
+      x-show="transferList.length > 0"
+      class="border-t border-gray-200 dark:border-gray-800 shrink-0 bg-white dark:bg-gray-950 max-h-36 overflow-y-auto"
+    >
+      <template x-for="t in transferList" :key="t.id">
+        <div
+          class="flex items-center gap-3 px-3 py-1.5 border-b border-gray-100 dark:border-gray-800/40 last:border-0"
+        >
+          <span class="text-xs truncate flex-1" x-text="t.filename"></span>
+          <template x-if="t.status === 'transferring'">
+            <div class="flex items-center gap-2 w-40 shrink-0">
+              <div
+                class="flex-1 h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden"
+              >
+                <div
+                  class="h-full rounded-full bg-violet-500 progress-animated transition-all duration-300"
+                  :style="`width:${t.percent}%`"
+                ></div>
+              </div>
+              <span
+                class="text-xs text-gray-400 w-8 text-right"
+                x-text="`${t.percent}%`"
+              ></span>
+            </div>
+          </template>
+          <template x-if="t.status === 'done'">
+            <span class="text-xs text-emerald-500 shrink-0">✓ Klar</span>
+          </template>
+          <template x-if="t.status === 'error'">
+            <span class="text-xs text-red-500 shrink-0" :title="t.error"
+              >✕ Fel</span
+            >
+          </template>
+        </div>
+      </template>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════
+     MODAL: Metadata editor
+═══════════════════════════════════════════════════════════════ -->
+    <div
+      x-show="metaModal"
+      x-cloak
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      @keydown.escape.window="metaModal = false"
+    >
+      <div
+        @click.stop
+        class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-6 border border-gray-200 dark:border-gray-700"
+      >
+        <h2 class="font-semibold text-base mb-4">Redigera metadata</h2>
+
+        <!-- Cover art -->
+        <div class="flex justify-center mb-4">
+          <div
+            class="w-24 h-24 rounded-xl bg-gray-100 dark:bg-gray-800 overflow-hidden"
+          >
+            <template x-if="metaForm.cover_art">
+              <img
+                :src="metaForm.cover_art"
+                class="w-full h-full object-cover"
+              />
+            </template>
+            <template x-if="!metaForm.cover_art">
+              <div
+                class="w-full h-full flex items-center justify-center text-gray-400 text-3xl"
+              >
+                ♪
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div class="col-span-2">
+            <label class="block text-xs font-medium text-gray-500 mb-1"
+              >Titel</label
+            >
+            <input
+              x-model="metaForm.title"
+              type="text"
+              class="w-full px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+            />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1"
+              >Artist</label
+            >
+            <input
+              x-model="metaForm.artist"
+              type="text"
+              class="w-full px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+            />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1"
+              >Album</label
+            >
+            <input
+              x-model="metaForm.album"
+              type="text"
+              class="w-full px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+            />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1"
+              >Genre</label
+            >
+            <input
+              x-model="metaForm.genre"
+              type="text"
+              class="w-full px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+            />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1"
+              >År</label
+            >
+            <input
+              x-model.number="metaForm.year"
+              type="number"
+              min="1900"
+              max="2099"
+              class="w-full px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+            />
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1"
+              >Spårnr</label
+            >
+            <input
+              x-model.number="metaForm.track_number"
+              type="number"
+              min="1"
+              class="w-full px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+            />
+          </div>
+        </div>
+
+        <div class="flex gap-3 mt-5 justify-end">
+          <button
+            @click="metaModal = false"
+            class="px-4 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+          >
+            Avbryt
+          </button>
+          <button
+            @click="saveMeta()"
+            :disabled="metaSaving"
+            class="px-4 py-1.5 text-sm rounded-lg bg-violet-600 hover:bg-violet-700 text-white font-medium transition-colors disabled:opacity-50"
+          >
+            <span x-text="metaSaving ? 'Sparar…' : 'Spara'"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════
+     MODAL: Format conversion
+═══════════════════════════════════════════════════════════════ -->
+    <div
+      x-show="convertModal"
+      x-cloak
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      @keydown.escape.window="convertModal = false"
+    >
+      <div
+        @click.stop
+        class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm p-6 border border-gray-200 dark:border-gray-700"
+      >
+        <h2 class="font-semibold text-base mb-1">Formatkonvertering</h2>
+        <p class="text-xs text-gray-500 mb-4">
+          Dina filer är inte i MP3. Vill du konvertera dem med ffmpeg?
+        </p>
+
+        <div class="space-y-3 mb-4">
+          <div class="flex items-center gap-3">
+            <label
+              class="text-xs font-medium text-gray-600 dark:text-gray-400 w-20"
+              >Format</label
+            >
+            <select
+              x-model="convertFmt"
+              class="flex-1 px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+            >
+              <option value="mp3">MP3</option>
+              <option value="flac">FLAC</option>
+              <option value="ogg">OGG</option>
+              <option value="m4a">M4A (AAC)</option>
+              <option value="wav">WAV</option>
+            </select>
+          </div>
+          <div
+            class="flex items-center gap-3"
+            x-show="['mp3','ogg','m4a'].includes(convertFmt)"
+          >
+            <label
+              class="text-xs font-medium text-gray-600 dark:text-gray-400 w-20"
+              >Bithastighet</label
+            >
+            <select
+              x-model.number="convertBitrate"
+              class="flex-1 px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+            >
+              <option value="128">128 kbps</option>
+              <option value="192">192 kbps</option>
+              <option value="256">256 kbps</option>
+              <option value="320">320 kbps</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="flex gap-3 justify-end">
+          <button
+            @click="convertModal = false"
+            class="px-4 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+          >
+            Avbryt
+          </button>
+          <button
+            @click="confirmConvert(false)"
+            class="px-4 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+          >
+            Behåll original
+          </button>
+          <button
+            @click="confirmConvert(true)"
+            class="px-4 py-1.5 text-sm rounded-lg bg-violet-600 hover:bg-violet-700 text-white font-medium transition-colors"
+          >
+            Konvertera
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════════════════════
+     MODAL: New playlist
+═══════════════════════════════════════════════════════════════ -->
+    <div
+      x-show="plModal"
+      x-cloak
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      @keydown.escape.window="plModal = false"
+    >
+      <div
+        @click.stop
+        class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-xs p-6 border border-gray-200 dark:border-gray-700"
+      >
+        <h2 class="font-semibold text-base mb-4">Ny spellista</h2>
+        <input
+          x-model="plName"
+          type="text"
+          placeholder="Spellista-namn…"
+          @keydown.enter="savePlaylist()"
+          class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-violet-500"
+        />
+        <p
+          class="text-xs text-gray-400 mb-4"
+          x-text="`${plTracks.length} valda låtar läggs till`"
+        ></p>
+        <div class="flex gap-3 justify-end">
+          <button
+            @click="plModal = false"
+            class="px-4 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+          >
+            Avbryt
+          </button>
+          <button
+            @click="savePlaylist()"
+            :disabled="!plName.trim()"
+            class="px-4 py-1.5 text-sm rounded-lg bg-violet-600 hover:bg-violet-700 text-white font-medium transition-colors disabled:opacity-40"
+          >
+            Skapa
+          </button>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

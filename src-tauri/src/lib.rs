@@ -1,0 +1,353 @@
+//! Tauri application entry-point and all IPC commands.
+
+mod audio;
+mod converter;
+mod error;
+mod fs;
+mod metadata;
+mod mtp;
+
+use std::sync::{Arc, Mutex};
+use tauri::Emitter;
+use error::AppError;
+
+// ─── Shared application state ─────────────────────────────────────────────────
+
+pub struct AppState {
+    pub mtp:   Arc<Mutex<mtp::MtpManager>>,
+    pub audio: Arc<Mutex<audio::AudioPlayer>>,
+    /// Temp files created during conversion; cleaned up on exit.
+    pub temp_files: Arc<Mutex<Vec<String>>>,
+}
+
+// ─── Tauri commands ───────────────────────────────────────────────────────────
+
+/// Scan for a connected MTP device and return its info (or null if none found).
+#[tauri::command]
+async fn scan_device(state: tauri::State<'_, AppState>) -> Result<Option<mtp::DeviceInfo>, AppError> {
+    let mtp = Arc::clone(&state.mtp);
+    tauri::async_runtime::spawn_blocking(move || mtp.lock().unwrap().scan())
+        .await
+        .map_err(|e| AppError::Task(e.to_string()))?
+}
+
+/// Disconnect the current device.
+#[tauri::command]
+async fn disconnect_device(state: tauri::State<'_, AppState>) -> Result<(), AppError> {
+    state.mtp.lock().unwrap().disconnect();
+    Ok(())
+}
+
+/// List all tracks on the connected device.
+#[tauri::command]
+async fn get_device_tracks(state: tauri::State<'_, AppState>) -> Result<Vec<mtp::Track>, AppError> {
+    let mtp = Arc::clone(&state.mtp);
+    tauri::async_runtime::spawn_blocking(move || mtp.lock().unwrap().get_tracks())
+        .await
+        .map_err(|e| AppError::Task(e.to_string()))?
+}
+
+/// Transfer one or more files to the device. Emits "transfer:progress" events.
+/// Returns a map of { transfer_id: new_track_id } for successfully transferred files.
+#[tauri::command]
+async fn send_tracks(
+    app:     tauri::AppHandle,
+    state:   tauri::State<'_, AppState>,
+    tracks:  Vec<mtp::SendTrackRequest>,
+) -> Result<Vec<u32>, AppError> {
+    let mtp        = Arc::clone(&state.mtp);
+    let temp_files = Arc::clone(&state.temp_files);
+    let app_arc    = Arc::new(app);
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut new_ids = Vec::new();
+
+        for (i, req) in tracks.iter().enumerate() {
+            let transfer_id = format!("transfer-{i}");
+            let _ = app_arc.emit("transfer:start", serde_json::json!({
+                "id":       transfer_id,
+                "filename": std::path::Path::new(&req.path)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or(""),
+                "index":    i,
+                "total":    tracks.len(),
+            }));
+
+            let mut mtp_guard = mtp.lock().unwrap();
+
+            match mtp_guard.send_track(req, Arc::clone(&app_arc), &transfer_id) {
+                Ok(id) => {
+                    new_ids.push(id);
+                    let _ = app_arc.emit("transfer:done", serde_json::json!({
+                        "id":       transfer_id,
+                        "track_id": id,
+                    }));
+                }
+                Err(e) => {
+                    let _ = app_arc.emit("transfer:error", serde_json::json!({
+                        "id":    transfer_id,
+                        "error": e.to_string(),
+                    }));
+                }
+            }
+        }
+
+        // Clean up any temp conversion files
+        let mut tf = temp_files.lock().unwrap();
+        for path in tf.drain(..) {
+            let _ = std::fs::remove_file(&path);
+        }
+
+        Ok(new_ids)
+    })
+    .await
+    .map_err(|e| AppError::Task(e.to_string()))?
+}
+
+/// Delete a track from the device.
+#[tauri::command]
+async fn delete_track(
+    state:    tauri::State<'_, AppState>,
+    track_id: u32,
+) -> Result<(), AppError> {
+    let mtp = Arc::clone(&state.mtp);
+    tauri::async_runtime::spawn_blocking(move || mtp.lock().unwrap().delete_track(track_id))
+        .await
+        .map_err(|e| AppError::Task(e.to_string()))?
+}
+
+/// Read metadata + cover art from a local audio file.
+#[tauri::command]
+async fn get_local_metadata(path: String) -> Result<metadata::TrackMetadata, AppError> {
+    tauri::async_runtime::spawn_blocking(move || metadata::read(&path))
+        .await
+        .map_err(|e| AppError::Task(e.to_string()))?
+}
+
+/// Write updated metadata back to a local audio file.
+#[tauri::command]
+async fn update_local_metadata(
+    path: String,
+    meta: metadata::TrackMetadata,
+) -> Result<(), AppError> {
+    tauri::async_runtime::spawn_blocking(move || metadata::write(&path, &meta))
+        .await
+        .map_err(|e| AppError::Task(e.to_string()))?
+}
+
+/// Start previewing a local audio file.
+#[tauri::command]
+async fn preview_track(
+    state: tauri::State<'_, AppState>,
+    path:  String,
+) -> Result<(), AppError> {
+    state.audio.lock().unwrap().play(path)
+}
+
+/// Stop audio preview.
+#[tauri::command]
+async fn stop_preview(state: tauri::State<'_, AppState>) -> Result<(), AppError> {
+    state.audio.lock().unwrap().stop();
+    Ok(())
+}
+
+/// Whether a preview is currently playing.
+#[tauri::command]
+async fn preview_is_playing(state: tauri::State<'_, AppState>) -> Result<bool, AppError> {
+    Ok(state.audio.lock().unwrap().is_playing())
+}
+
+/// List playlists on the device.
+#[tauri::command]
+async fn get_playlists(state: tauri::State<'_, AppState>) -> Result<Vec<mtp::Playlist>, AppError> {
+    let mtp = Arc::clone(&state.mtp);
+    tauri::async_runtime::spawn_blocking(move || mtp.lock().unwrap().get_playlists())
+        .await
+        .map_err(|e| AppError::Task(e.to_string()))?
+}
+
+/// Create a new playlist.
+#[tauri::command]
+async fn create_playlist(
+    state:    tauri::State<'_, AppState>,
+    name:     String,
+    track_ids: Vec<u32>,
+) -> Result<u32, AppError> {
+    let mtp = Arc::clone(&state.mtp);
+    tauri::async_runtime::spawn_blocking(move || mtp.lock().unwrap().create_playlist(&name, &track_ids))
+        .await
+        .map_err(|e| AppError::Task(e.to_string()))?
+}
+
+/// Update an existing playlist.
+#[tauri::command]
+async fn update_playlist(
+    state:       tauri::State<'_, AppState>,
+    playlist_id: u32,
+    name:        String,
+    track_ids:   Vec<u32>,
+) -> Result<(), AppError> {
+    let mtp = Arc::clone(&state.mtp);
+    tauri::async_runtime::spawn_blocking(move || {
+        mtp.lock().unwrap().update_playlist(playlist_id, &name, &track_ids)
+    })
+    .await
+    .map_err(|e| AppError::Task(e.to_string()))?
+}
+
+/// Delete a playlist (tracks remain on the device).
+#[tauri::command]
+async fn delete_playlist(
+    state:       tauri::State<'_, AppState>,
+    playlist_id: u32,
+) -> Result<(), AppError> {
+    let mtp = Arc::clone(&state.mtp);
+    tauri::async_runtime::spawn_blocking(move || mtp.lock().unwrap().delete_playlist(playlist_id))
+        .await
+        .map_err(|e| AppError::Task(e.to_string()))?
+}
+
+/// Convert an audio file and return the path to the converted temp file.
+/// The file is cleaned up automatically after the next send_tracks call.
+#[tauri::command]
+async fn convert_audio(
+    state: tauri::State<'_, AppState>,
+    req:   converter::ConvertRequest,
+) -> Result<String, AppError> {
+    let temp_files = Arc::clone(&state.temp_files);
+    tauri::async_runtime::spawn_blocking(move || {
+        let out = converter::convert(&req)?;
+        temp_files.lock().unwrap().push(out.clone());
+        Ok(out)
+    })
+    .await
+    .map_err(|e| AppError::Task(e.to_string()))?
+}
+
+/// Return whether ffmpeg is available on PATH.
+#[tauri::command]
+async fn ffmpeg_available() -> bool {
+    converter::ffmpeg_available()
+}
+
+// ─── Filesystem (mass-storage) device commands ───────────────────────────────
+
+/// Detect mounted removable drives that contain audio files.
+#[tauri::command]
+async fn detect_mounts() -> Result<Vec<fs::MountDevice>, AppError> {
+    fs::detect_mounts()
+}
+
+/// Scan a specific mount path and return device info.
+#[tauri::command]
+async fn scan_mount_device(mount_path: String) -> Result<Option<fs::MountDevice>, AppError> {
+    fs::scan_mount(&mount_path)
+}
+
+/// List all audio tracks on a mounted device.
+#[tauri::command]
+async fn get_mount_tracks(mount_path: String) -> Result<Vec<fs::MountTrack>, AppError> {
+    fs::get_tracks(&mount_path)
+}
+
+/// List contents of a single directory within a mount (folder view).
+#[tauri::command]
+async fn get_folder_contents(
+    mount_path: String,
+    sub_path:   String,
+) -> Result<fs::FolderContents, AppError> {
+    fs::list_directory(&mount_path, &sub_path)
+}
+
+/// Copy a file onto a mounted device (supports progress events).
+#[tauri::command]
+async fn copy_to_device(
+    app:         tauri::AppHandle,
+    source:      String,
+    dest_dir:    String,
+    filename:    String,
+    transfer_id: String,
+) -> Result<String, AppError> {
+    let app_arc = Arc::new(app);
+    tauri::async_runtime::spawn_blocking(move || {
+        fs::copy_to_device(&source, &dest_dir, &filename, &app_arc, &transfer_id)
+    })
+    .await
+    .map_err(|e| AppError::Task(e.to_string()))?
+}
+
+/// Delete a file on a mounted device.
+#[tauri::command]
+async fn delete_mount_file(path: String) -> Result<(), AppError> {
+    fs::delete_file(&path)
+}
+
+/// Recursively delete a folder on a mounted device.
+#[tauri::command]
+async fn delete_mount_folder(path: String) -> Result<(), AppError> {
+    fs::delete_folder(&path)
+}
+
+/// Get disk usage (total / used / free) for a mount path.
+#[tauri::command]
+async fn get_disk_usage(mount_path: String) -> Result<fs::DiskUsage, AppError> {
+    fs::disk_usage(&mount_path)
+}
+
+/// If path is an audio file, return it. If it's a directory, recursively
+/// find all audio files inside. Used for drag-drop of folders.
+#[tauri::command]
+async fn expand_audio_path(path: String) -> Result<Vec<String>, AppError> {
+    fs::expand_audio_path(&path)
+}
+
+/// Create a directory and all parents on a mounted device.
+#[tauri::command]
+async fn create_dir_all(path: String) -> Result<(), AppError> {
+    fs::create_dir_all(&path)
+}
+
+// ─── App entry-point ─────────────────────────────────────────────────────────
+
+pub fn run() {
+    env_logger::init();
+
+    tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .manage(AppState {
+            mtp:        Arc::new(Mutex::new(mtp::MtpManager::new())),
+            audio:      Arc::new(Mutex::new(audio::AudioPlayer::new())),
+            temp_files: Arc::new(Mutex::new(Vec::new())),
+        })
+        .invoke_handler(tauri::generate_handler![
+            scan_device,
+            disconnect_device,
+            get_device_tracks,
+            send_tracks,
+            delete_track,
+            get_local_metadata,
+            update_local_metadata,
+            preview_track,
+            stop_preview,
+            preview_is_playing,
+            get_playlists,
+            create_playlist,
+            update_playlist,
+            delete_playlist,
+            convert_audio,
+            ffmpeg_available,
+            detect_mounts,
+            scan_mount_device,
+            get_mount_tracks,
+            get_folder_contents,
+            copy_to_device,
+            delete_mount_file,
+            delete_mount_folder,
+            get_disk_usage,
+            expand_audio_path,
+            create_dir_all,
+        ])
+        .run(tauri::generate_context!())
+        .expect("Error while running Snowsky Transfer");
+}
