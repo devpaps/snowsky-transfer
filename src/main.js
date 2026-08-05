@@ -107,8 +107,9 @@ Alpine.data('app', () => ({
   cancelTransferRequested: false,
   transferNotice: null,
   transferCloseTimer: null,
+  connectionMonitor: null,
+  connectionLost: false,
   syncSummary: null,
-  syncModal: false,
   syncProfiles: [],
   activeSyncProfileId: null,
   isScanningSyncProfile: false,
@@ -195,11 +196,56 @@ Alpine.data('app', () => ({
 
     // Check ffmpeg
     this.ffmpegAvailable = await invoke('ffmpeg_available')
+
+    // USB devices do not always emit a disconnect event, so poll their health.
+    this.connectionMonitor = setInterval(() => this.checkDeviceConnection(), 1500)
+  },
+
+  async checkDeviceConnection() {
+    if (this.isConnecting || this.connectionLost) return
+
+    try {
+      let present = true
+      if (this.device) {
+        present = await invoke('mtp_device_present')
+      } else if (this.selectedMount) {
+        present = await invoke('mount_device_present', {
+          mountPath: this.selectedMount.mount_path,
+        })
+      } else {
+        return
+      }
+
+      if (!present) await this.handleConnectionLost()
+    } catch (e) {
+      console.error('connection check error:', e)
+    }
+  },
+
+  async handleConnectionLost() {
+    if (this.connectionLost) return
+    this.connectionLost = true
+    this.transferNotice = 'Device connection lost. The device may be powered off or unplugged.'
+    clearTimeout(this.transferCloseTimer)
+
+    if (this.device) await invoke('disconnect_device').catch(e => console.error('disconnect_device error:', e))
+    this.device = null
+    this.deviceTracks = []
+    this.devicePlaylists = []
+    this.selectedDevice.clear()
+    this.selectedMount = null
+    this.mountDevices = []
+    this.folderPath = ''
+    this.folderContents = { directories: [], files: [] }
+    this.folderHistory = []
+    this.selectedMountDisk = null
+    this.deviceSearchResults = []
   },
 
   // ─── Device ──────────────────────────────────────────────────────────────
   async scanDevice() {
     this.isConnecting = true
+    this.connectionLost = false
     try {
       this.device = await invoke('scan_device')
       if (this.device) {
@@ -414,6 +460,7 @@ Alpine.data('app', () => ({
     this.viewMode      = 'folder'
     this.selectedMountDisk = null
     this.deviceSearchResults = []
+    this.connectionLost = false
   },
 
   async safeEjectMount() {
@@ -443,6 +490,7 @@ Alpine.data('app', () => ({
     this.viewMode      = 'folder'
     this.selectedMountDisk = null
     this.deviceSearchResults = []
+    this.connectionLost = false
   },
 
   async loadDeviceTracks() {
@@ -520,65 +568,6 @@ Alpine.data('app', () => ({
       filters: [{ name: 'Audio', extensions: ['mp3','flac','ogg','wav','m4a','aac'] }],
     })
     if (paths) this.addFilePaths(Array.isArray(paths) ? paths : [paths])
-  },
-
-  async syncFolder() {
-    if (!this.selectedMount || this.isTransferring) return
-    const folder = await open({ directory: true, multiple: false })
-    if (!folder || Array.isArray(folder)) return
-
-    try {
-      const sourceFiles = await invoke('expand_audio_path', { path: folder })
-      const deviceFiles = await invoke('get_mount_tracks', { mountPath: this.selectedMount.mount_path })
-      const rootName = folder.split('/').filter(Boolean).pop() || 'Music'
-      const deviceByPath = new Map(deviceFiles.map(file => [syncPathKey(file.id), file]))
-      const candidates = []
-      let skipped = 0
-      let changed = 0
-
-      for (const sourcePath of sourceFiles) {
-        const relative = sourcePath.slice(folder.length).replace(/^\/+/, '')
-        const targetId = `${rootName}/${relative}`
-        const existing = deviceByPath.get(syncPathKey(targetId))
-        const sourceSize = Number(await invoke('get_local_file_size', { path: sourcePath }))
-        if (existing && Number(existing.file_size) === sourceSize) {
-          skipped++
-          continue
-        }
-        if (existing) changed++
-        candidates.push({
-          path: sourcePath,
-          name: sourcePath.split('/').pop(),
-          ext: extOf(sourcePath),
-          subPath: `${rootName}/${relative}`,
-          meta: null,
-          loading: true,
-        })
-      }
-
-      await Promise.all(candidates.map(async file => {
-        try { file.meta = await invoke('get_local_metadata', { path: file.path }) } catch (_) { file.meta = null }
-        file.loading = false
-      }))
-      this.syncSummary = { folder: rootName, skipped, changed, pending: candidates.length }
-
-      if (!candidates.length) {
-        this.syncModal = true
-        return
-      }
-    if (!window.confirm(`Sync ${candidates.length} new or changed files to the folder "${rootName}"?`)) return
-
-      for (const file of candidates) {
-        const relative = file.subPath
-        const existing = deviceByPath.get(syncPathKey(relative))
-        if (existing) await invoke('delete_mount_file', { path: existing.path })
-      }
-      this.transferDestination = ''
-      await this.doMountTransfer(candidates, '')
-    } catch (e) {
-      console.error('syncFolder error:', e)
-      window.alert(`Could not sync the folder: ${e}`)
-    }
   },
 
   persistSyncProfiles() {
@@ -1085,7 +1074,7 @@ Alpine.data('app', () => ({
     const files = [...rawFiles]
 
     for (let i = 0; i < files.length; i++) {
-      if (this.cancelTransferRequested) break
+      if (this.cancelTransferRequested || !this.selectedMount) break
       const file   = files[i]
       const id     = `transfer-${i}`
 
@@ -1139,6 +1128,13 @@ Alpine.data('app', () => ({
       }
     }
 
+    // A disconnected mount is cleared by the connection monitor.
+    if (!this.selectedMount) {
+      this.isTransferring = false
+      this.cancelTransferRequested = false
+      return
+    }
+
     // Refresh view after copy
     await this.invalidateMountSearchCache()
     if (this.viewMode === 'folder') {
@@ -1175,8 +1171,16 @@ Alpine.data('app', () => ({
       : `${done} ${done === 1 ? 'file' : 'files'} transferred successfully`
 
     this.transferCloseTimer = setTimeout(() => {
-      if (!this.isTransferring) this.transfers = {}
+      if (!this.isTransferring) {
+        this.transfers = {}
+        this.transferNotice = null
+      }
     }, 3500)
+  },
+
+  closeTransferNotice() {
+    clearTimeout(this.transferCloseTimer)
+    this.transferNotice = null
   },
 
   cancelTransfer() {

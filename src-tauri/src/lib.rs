@@ -40,6 +40,18 @@ async fn disconnect_device(state: tauri::State<'_, AppState>) -> Result<(), AppE
     Ok(())
 }
 
+/// Check whether the currently connected MTP device is still visible.
+#[tauri::command]
+async fn mtp_device_present(state: tauri::State<'_, AppState>) -> Result<bool, AppError> {
+    let mtp = Arc::clone(&state.mtp);
+    tauri::async_runtime::spawn_blocking(move || {
+        let manager = mtp.lock().unwrap();
+        Ok(manager.is_connected() && manager.is_device_present())
+    })
+    .await
+    .map_err(|e| AppError::Task(e.to_string()))?
+}
+
 /// List all tracks on the connected device.
 #[tauri::command]
 async fn get_device_tracks(state: tauri::State<'_, AppState>) -> Result<Vec<mtp::Track>, AppError> {
@@ -269,6 +281,12 @@ async fn scan_mount_device(mount_path: String) -> Result<Option<fs::MountDevice>
     fs::scan_mount(&mount_path)
 }
 
+/// Check whether a mounted device path is still available.
+#[tauri::command]
+async fn mount_device_present(mount_path: String) -> Result<bool, AppError> {
+    Ok(fs::mount_present(&mount_path))
+}
+
 /// List all audio tracks on a mounted device.
 #[tauri::command]
 async fn get_mount_tracks(mount_path: String) -> Result<Vec<fs::MountTrack>, AppError> {
@@ -398,6 +416,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             scan_device,
             disconnect_device,
+            mtp_device_present,
             get_device_tracks,
             send_tracks,
             delete_track,
@@ -416,6 +435,7 @@ pub fn run() {
             ffmpeg_available,
             detect_mounts,
             scan_mount_device,
+            mount_device_present,
             get_mount_tracks,
             search_mount_tracks,
             clear_mount_search_cache,

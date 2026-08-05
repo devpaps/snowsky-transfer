@@ -401,6 +401,20 @@ impl MtpManager {
         self.device.is_some()
     }
 
+    /// Check whether an MTP device is still visible to the USB stack without
+    /// touching the existing libmtp session, which may be stale after power-off.
+    pub fn is_device_present(&self) -> bool {
+        unsafe {
+            let mut raw_list: *mut ffi::LIBMTP_raw_device_t = std::ptr::null_mut();
+            let mut count: c_int = 0;
+            let err = ffi::LIBMTP_Detect_Raw_Devices(&mut raw_list, &mut count);
+            if !raw_list.is_null() {
+                libc::free(raw_list as *mut c_void);
+            }
+            err == ffi::LIBMTP_ERROR_NONE && count > 0
+        }
+    }
+
     /// List all tracks currently on the device.
     pub fn get_tracks(&mut self) -> Result<Vec<Track>, AppError> {
         let ptr = self.device_ptr()?;

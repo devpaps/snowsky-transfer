@@ -119,6 +119,33 @@ pub fn detect_mounts() -> Result<Vec<MountDevice>, AppError> {
     Ok(devices)
 }
 
+/// Return whether a path is still backed by a mounted filesystem. The mount
+/// directory can survive an unmount, so checking `Path::is_dir()` is not enough.
+pub fn mount_present(mount_path: &str) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        let decode_mount_field = |field: &str| {
+            field
+                .replace("\\040", " ")
+                .replace("\\011", "\t")
+                .replace("\\012", "\n")
+                .replace("\\134", "\\")
+        };
+
+        if let Ok(mountinfo) = std::fs::read_to_string("/proc/self/mountinfo") {
+            return mountinfo.lines().any(|line| {
+                line.split_whitespace()
+                    .nth(4)
+                    .map(decode_mount_field)
+                    .as_deref() == Some(mount_path)
+            });
+        }
+    }
+
+    // Keep a sensible fallback for platforms without Linux mountinfo.
+    Path::new(mount_path).is_dir()
+}
+
 /// Return info for a single mount path (checks it exists + counts tracks).
 pub fn scan_mount(mount_path: &str) -> Result<Option<MountDevice>, AppError> {
     let path = Path::new(mount_path);
