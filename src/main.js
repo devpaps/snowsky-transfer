@@ -49,6 +49,10 @@ function syncPathKey(path) {
     .toLowerCase()
 }
 
+function hasOrderPrefix(name) {
+  return /^\s*\d{1,3}(?:\s*[-._)]|\s)/.test(name)
+}
+
 const AUDIO_EXTS = new Set(['mp3', 'flac', 'ogg', 'wav', 'm4a', 'aac'])
 
 // ─── Alpine app ──────────────────────────────────────────────────────────────
@@ -80,6 +84,12 @@ Alpine.data('app', () => ({
   // ── Local files queue
   localFiles: [],         // Array<{ path, name, ext, meta | null }>
   selectedLocal: new Set(),
+  draggedLocalPath: null,
+  dragOverLocalPath: null,
+  pointerDraggingLocal: false,
+  pointerDraggingDevice: false,
+  draggedDeviceId: null,
+  deviceOrderChanged: false,
 
   // ── Transfer
   transfers:      {},     // id -> { filename, percent, status }
@@ -538,6 +548,60 @@ Alpine.data('app', () => ({
     this.selectedLocal = new Set(this.selectedLocal)
   },
 
+  startLocalDrag(path) {
+    this.draggedLocalPath = path
+  },
+
+  dragOverLocal(path) {
+    if (this.draggedLocalPath && this.draggedLocalPath !== path) this.dragOverLocalPath = path
+  },
+
+  dropLocalFile(path) {
+    const from = this.localFiles.findIndex(file => file.path === this.draggedLocalPath)
+    const to = this.localFiles.findIndex(file => file.path === path)
+    if (from < 0 || to < 0 || from === to) return this.cancelLocalDrag()
+    const reordered = [...this.localFiles]
+    const [file] = reordered.splice(from, 1)
+    reordered.splice(to, 0, file)
+    this.localFiles = reordered
+    this.cancelLocalDrag()
+  },
+
+  cancelLocalDrag() {
+    this.draggedLocalPath = null
+    this.dragOverLocalPath = null
+  },
+
+  moveLocalFile(path, direction) {
+    const index = this.localFiles.findIndex(file => file.path === path)
+    const target = index + direction
+    if (index < 0 || target < 0 || target >= this.localFiles.length) return
+    const reordered = [...this.localFiles]
+    ;[reordered[index], reordered[target]] = [reordered[target], reordered[index]]
+    this.localFiles = reordered
+  },
+
+  startLocalPointerDrag(path) {
+    this.draggedLocalPath = path
+    this.pointerDraggingLocal = true
+  },
+
+  moveLocalPointer(path) {
+    if (!this.pointerDraggingLocal || !this.draggedLocalPath || this.draggedLocalPath === path) return
+    const from = this.localFiles.findIndex(file => file.path === this.draggedLocalPath)
+    const to = this.localFiles.findIndex(file => file.path === path)
+    if (from < 0 || to < 0) return
+    const reordered = [...this.localFiles]
+    const [file] = reordered.splice(from, 1)
+    reordered.splice(to, 0, file)
+    this.localFiles = reordered
+  },
+
+  endLocalPointerDrag() {
+    this.pointerDraggingLocal = false
+    this.cancelLocalDrag()
+  },
+
   selectAllLocal() {
     if (this.selectedLocal.size === this.localFiles.length) {
       this.selectedLocal = new Set()
@@ -548,6 +612,81 @@ Alpine.data('app', () => ({
 
   get selectedLocalFiles() {
     return this.localFiles.filter(f => this.selectedLocal.has(f.path))
+  },
+
+  async moveDeviceTrack(track, direction) {
+    if (!this.selectedMount || this.isTransferring) return
+    const files = this.viewMode === 'folder' ? this.folderContents.files : this.deviceTracks
+    const index = files.findIndex(file => file.id === track.id)
+    const target = index + direction
+    if (index < 0 || target < 0 || target >= files.length) return
+
+    const ordered = [...files]
+    ;[ordered[index], ordered[target]] = [ordered[target], ordered[index]]
+    try {
+      await this.renameDeviceOrder(ordered)
+    } catch (e) {
+      console.error('moveDeviceTrack error:', e)
+      window.alert(`Kunde inte ändra ordningen: ${e}`)
+    }
+  },
+
+  startDevicePointerDrag(track) {
+    if (!this.selectedMount || this.isTransferring) return
+    this.pointerDraggingDevice = true
+    this.draggedDeviceId = track.id
+    this.deviceOrderChanged = false
+  },
+
+  moveDevicePointer(track) {
+    if (!this.pointerDraggingDevice || !this.draggedDeviceId || this.draggedDeviceId === track.id) return
+    const files = this.viewMode === 'folder' ? this.folderContents.files : this.deviceTracks
+    const from = files.findIndex(file => file.id === this.draggedDeviceId)
+    const to = files.findIndex(file => file.id === track.id)
+    if (from < 0 || to < 0) return
+    const reordered = [...files]
+    const [file] = reordered.splice(from, 1)
+    reordered.splice(to, 0, file)
+    if (this.viewMode === 'folder') this.folderContents = { ...this.folderContents, files: reordered }
+    else this.deviceTracks = reordered
+    this.deviceOrderChanged = true
+  },
+
+  async endDevicePointerDrag() {
+    if (!this.pointerDraggingDevice) return
+    this.pointerDraggingDevice = false
+    this.draggedDeviceId = null
+    if (!this.deviceOrderChanged) return
+    this.deviceOrderChanged = false
+    const files = this.viewMode === 'folder' ? this.folderContents.files : this.deviceTracks
+    try {
+      await this.renameDeviceOrder(files)
+    } catch (e) {
+      console.error('device reorder error:', e)
+      window.alert(`Kunde inte ändra ordningen: ${e}`)
+      if (this.selectedMount) {
+        if (this.viewMode === 'folder') await this.loadFolderContents(this.selectedMount.mount_path, this.folderPath)
+        else await this.loadMountTracks(this.selectedMount.mount_path)
+      }
+    }
+  },
+
+  async renameDeviceOrder(ordered) {
+    const files = ordered.map((file, index) => {
+      const name = file.id.split('/').pop()
+      const cleanName = name.replace(/^\d{1,3}\s*-\s*/, '')
+      const parent = file.id.includes('/') ? file.id.slice(0, file.id.lastIndexOf('/') + 1) : ''
+      return { oldPath: file.id, newPath: `${parent}${String(index + 1).padStart(2, '0')} - ${cleanName}` }
+    })
+    await invoke('rename_mount_files', {
+      mountPath: this.selectedMount.mount_path,
+      files,
+    })
+    if (this.viewMode === 'folder') {
+      await this.loadFolderContents(this.selectedMount.mount_path, this.folderPath)
+    } else {
+      await this.loadMountTracks(this.selectedMount.mount_path)
+    }
   },
 
   // ─── Transfer ────────────────────────────────────────────────────────────
@@ -571,28 +710,24 @@ Alpine.data('app', () => ({
       }
     }
 
-    // Sort by track number so files arrive in order on the device
-    const sorted = [...files].sort((a, b) => {
-      const ta = trackNumberOf(a)
-      const tb = trackNumberOf(b)
-      return ta - tb || a.name.localeCompare(b.name, undefined, { numeric: true })
-    })
+    // Preserve the order chosen in the local file queue.
+    const ordered = [...files]
 
     // If ffmpeg available, ask about conversion (skip MP3 and FLAC)
     const needsConvert = files.some(f => f.ext !== 'mp3' && f.ext !== 'flac')
     if (this.ffmpegAvailable && needsConvert) {
-      this.pendingFiles  = sorted
+      this.pendingFiles  = ordered
       this.convertModal  = true
       return
     }
 
     // If using a mount device, copy files directly
     if (this.selectedMount) {
-      await this.doMountTransfer(sorted)
+      await this.doMountTransfer(ordered)
       return
     }
 
-    await this.doTransfer(sorted.map(f => this.buildSendRequest(f, null)))
+    await this.doTransfer(ordered.map((f, i) => this.buildSendRequest(f, null, i + 1)))
   },
 
   async confirmConvert(convert) {
@@ -608,7 +743,7 @@ Alpine.data('app', () => ({
     // Convert files that need it first
     const sendRequests = []
     const mountFiles   = []
-    for (const r of requests) {
+    for (const [index, r] of requests.entries()) {
       if (r.convertTo) {
         try {
           const outPath = await invoke('convert_audio', {
@@ -617,21 +752,21 @@ Alpine.data('app', () => ({
           if (this.selectedMount) {
               mountFiles.push({ ...r.file, originalPath: r.file.path, path: outPath })
           } else {
-            sendRequests.push(this.buildSendRequest(r.file, outPath))
+            sendRequests.push(this.buildSendRequest(r.file, outPath, index + 1))
           }
         } catch (e) {
           console.error('convert_audio error:', e)
           if (this.selectedMount) {
             mountFiles.push(r.file)
           } else {
-            sendRequests.push(this.buildSendRequest(r.file, null))
+            sendRequests.push(this.buildSendRequest(r.file, null, index + 1))
           }
         }
       } else {
         if (this.selectedMount) {
           mountFiles.push(r.file)
         } else {
-          sendRequests.push(this.buildSendRequest(r.file, null))
+          sendRequests.push(this.buildSendRequest(r.file, null, index + 1))
         }
       }
     }
@@ -643,14 +778,13 @@ Alpine.data('app', () => ({
     }
   },
 
-  buildSendRequest(file, convertedPath) {
+  buildSendRequest(file, convertedPath, orderNumber = 1) {
     const m = file.meta || {}
     const sourceName = file.name.replace(/\.[^.]+$/, '')
     const extension = (convertedPath || file.path).split('.').pop()
-    const trackNumber = trackNumberOf(file)
-    const filename = trackNumber < 999
-      ? `${String(trackNumber).padStart(2, '0')} - ${sourceName}.${extension}`
-      : `${sourceName}.${extension}`
+    const filename = hasOrderPrefix(sourceName)
+      ? `${sourceName}.${extension}`
+      : `${String(orderNumber).padStart(2, '0')} - ${sourceName}.${extension}`
     return {
       path:         convertedPath || file.path,
       filename,
@@ -658,7 +792,7 @@ Alpine.data('app', () => ({
       artist:       m.artist  || null,
       album:        m.album   || null,
       genre:        m.genre   || null,
-      track_number: trackNumber < 999 ? trackNumber : null,
+      track_number: orderNumber,
       duration_ms:  m.duration_ms  || null,
     }
   },
@@ -688,12 +822,8 @@ Alpine.data('app', () => ({
     clearTimeout(this.transferCloseTimer)
     const dest          = this.selectedMount.mount_path + (this.transferDestination ? '/' + this.transferDestination : '')
 
-    // Sort by track number so files arrive in order on the device
-    const files = [...rawFiles].sort((a, b) => {
-      const ta = trackNumberOf(a)
-      const tb = trackNumberOf(b)
-      return ta - tb || a.name.localeCompare(b.name, undefined, { numeric: true })
-    })
+    // Preserve the order chosen in the local file queue.
+    const files = [...rawFiles]
 
     for (let i = 0; i < files.length; i++) {
       if (this.cancelTransferRequested) break
@@ -722,10 +852,9 @@ Alpine.data('app', () => ({
         }
       }
 
-      // Prefix filename with track number for correct alphabetical sort on device
-      const trackNum = trackNumberOf(file)
-      if (trackNum < 999) {
-        targetName = String(trackNum).padStart(2, '0') + ' - ' + targetName
+      // Preserve an existing order prefix instead of duplicating it.
+      if (!hasOrderPrefix(targetName)) {
+        targetName = String(i + 1).padStart(2, '0') + ' - ' + targetName
       }
 
       this.transfers[id] = { filename: targetName, percent: 0, status: 'transferring', index: i, total: files.length, sourceFile: file }

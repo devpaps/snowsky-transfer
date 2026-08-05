@@ -218,6 +218,35 @@ pub fn delete_file(path: &str) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Rename several files as one operation, using temporary names to avoid
+/// collisions when two files exchange positions.
+pub fn rename_files(
+    mount_path: &str,
+    files: &[(String, String)],
+) -> Result<(), AppError> {
+    let root = Path::new(mount_path);
+    let mut temporary = Vec::new();
+    for (index, (old_path, new_path)) in files.iter().enumerate() {
+        let old = root.join(old_path);
+        let temp = root.join(format!(".snowsky-reorder-{index}.tmp"));
+        if !old.is_file() {
+            return Err(AppError::Io(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("File not found: {}", old.display()),
+            )));
+        }
+        std::fs::rename(&old, &temp)?;
+        temporary.push((temp, root.join(new_path)));
+    }
+    for (temp, destination) in temporary {
+        if let Some(parent) = destination.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::rename(temp, destination)?;
+    }
+    Ok(())
+}
+
 /// Recursively delete a directory on the mounted device.
 pub fn delete_folder(path: &str) -> Result<(), AppError> {
     std::fs::remove_dir_all(path)?;
@@ -315,12 +344,7 @@ pub fn list_directory(mount_root: &str, sub_path: &str) -> Result<FolderContents
     }
 
     directories.sort_by(|a, b| a.name.cmp(&b.name));
-    files.sort_by(|a, b| {
-        a.title
-            .as_deref()
-            .unwrap_or("")
-            .cmp(b.title.as_deref().unwrap_or(""))
-    });
+    files.sort_by(|a, b| a.id.cmp(&b.id));
 
     let parent_rel = if sub_path.is_empty() || sub_path == "/" {
         None

@@ -305,6 +305,24 @@ async fn delete_mount_file(path: String) -> Result<(), AppError> {
     fs::delete_file(&path)
 }
 
+#[tauri::command]
+async fn rename_mount_files(
+    mount_path: String,
+    files: Vec<serde_json::Value>,
+) -> Result<(), AppError> {
+    let pairs = files
+        .into_iter()
+        .map(|file| {
+            let old_path = file.get("oldPath").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let new_path = file.get("newPath").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            (old_path, new_path)
+        })
+        .collect::<Vec<_>>();
+    tauri::async_runtime::spawn_blocking(move || fs::rename_files(&mount_path, &pairs))
+        .await
+        .map_err(|e| AppError::Task(e.to_string()))?
+}
+
 /// Recursively delete a folder on a mounted device.
 #[tauri::command]
 async fn delete_mount_folder(path: String) -> Result<(), AppError> {
@@ -374,6 +392,7 @@ pub fn run() {
             get_folder_contents,
             copy_to_device,
             delete_mount_file,
+            rename_mount_files,
             delete_mount_folder,
             get_disk_usage,
             expand_audio_path,
