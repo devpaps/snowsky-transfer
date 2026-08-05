@@ -448,7 +448,7 @@
             <div class="flex items-center gap-1 mr-1">
               <input
                 x-model="deviceSearch"
-                @input="ensureSearchLibraryLoaded()"
+                @input="searchDeviceLibrary()"
                 type="search"
                 placeholder="Search library"
                 aria-label="Search device library"
@@ -456,7 +456,7 @@
               />
               <select
                 x-model="deviceFormat"
-                @change="ensureSearchLibraryLoaded()"
+                @change="searchDeviceLibrary()"
                 aria-label="Filter by format"
                 class="w-16 sm:w-20 px-1.5 py-0 rounded-md border-gray-600 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs focus:outline-none"
               >

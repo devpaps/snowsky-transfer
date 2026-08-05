@@ -80,6 +80,9 @@ Alpine.data('app', () => ({
   deviceSearch:   '',
   deviceFormat:   'all',
   isLoadingSearchLibrary: false,
+  deviceSearchResults: [],
+  deviceSearchTimer: null,
+  deviceSearchRequest: 0,
 
   // ── Disk usage
   selectedMountDisk: null,   // DiskUsage | null
@@ -294,6 +297,7 @@ Alpine.data('app', () => ({
     const fullPath = this.selectedMount.mount_path + '/' + relPath
     try {
       await invoke('delete_mount_folder', { path: fullPath })
+      await this.invalidateMountSearchCache()
       // Remove from selection if any files from that folder were selected
       for (const id of this.selectedDevice) {
         if (id.startsWith(relPath + '/') || id === relPath) {
@@ -319,21 +323,12 @@ Alpine.data('app', () => ({
     }
   },
 
-  async ensureSearchLibraryLoaded() {
-    if (!this.selectedMount || this.deviceTracks.length || this.isLoadingSearchLibrary) return
-    this.isLoadingSearchLibrary = true
-    try {
-      await this.loadMountTracks(this.selectedMount.mount_path)
-    } finally {
-      this.isLoadingSearchLibrary = false
-    }
-  },
-
   get isDeviceSearchActive() {
     return this.deviceSearch.trim().length > 0 || this.deviceFormat !== 'all'
   },
 
   get filteredDeviceTracks() {
+    if (this.selectedMount && this.isDeviceSearchActive) return this.deviceSearchResults
     const query = this.deviceSearch.trim().toLowerCase()
     return this.deviceTracks.filter(track => {
       const format = String(track.filetype || track.filename?.split('.').pop() || '').toLowerCase()
@@ -342,6 +337,42 @@ Alpine.data('app', () => ({
       return [track.title, track.artist, track.album, track.filename, track.path, track.id]
         .filter(Boolean)
         .some(value => String(value).toLowerCase().includes(query))
+    })
+  },
+
+  searchDeviceLibrary() {
+    clearTimeout(this.deviceSearchTimer)
+    this.deviceSearchTimer = setTimeout(() => this.runDeviceSearch(), 120)
+  },
+
+  async runDeviceSearch() {
+    if (!this.selectedMount) return
+    if (!this.isDeviceSearchActive) {
+      this.deviceSearchResults = []
+      return
+    }
+    const request = ++this.deviceSearchRequest
+    this.isLoadingSearchLibrary = true
+    try {
+      const results = await invoke('search_mount_tracks', {
+        mountPath: this.selectedMount.mount_path,
+        query: this.deviceSearch,
+        format: this.deviceFormat,
+      })
+      if (request === this.deviceSearchRequest) this.deviceSearchResults = results
+    } catch (e) {
+      console.error('search_mount_tracks error:', e)
+      if (request === this.deviceSearchRequest) this.deviceSearchResults = []
+    } finally {
+      if (request === this.deviceSearchRequest) this.isLoadingSearchLibrary = false
+    }
+  },
+
+  async invalidateMountSearchCache() {
+    if (!this.selectedMount) return
+    this.deviceSearchResults = []
+    await invoke('clear_mount_search_cache', { mountPath: this.selectedMount.mount_path }).catch(e => {
+      console.error('clear_mount_search_cache error:', e)
     })
   },
 
@@ -354,6 +385,7 @@ Alpine.data('app', () => ({
   },
 
   async disconnectMount() {
+    clearTimeout(this.deviceSearchTimer)
     this.selectedMount = null
     this.deviceTracks  = []
     this.devicePlaylists = []
@@ -363,6 +395,7 @@ Alpine.data('app', () => ({
     this.folderHistory  = []
     this.viewMode      = 'folder'
     this.selectedMountDisk = null
+    this.deviceSearchResults = []
   },
 
   async safeEjectMount() {
@@ -391,6 +424,7 @@ Alpine.data('app', () => ({
     this.folderHistory  = []
     this.viewMode      = 'folder'
     this.selectedMountDisk = null
+    this.deviceSearchResults = []
   },
 
   async loadDeviceTracks() {
@@ -439,6 +473,7 @@ Alpine.data('app', () => ({
       } else {
         await this.loadMountTracks(base)
       }
+      await this.invalidateMountSearchCache()
       this.loadDiskUsage(base)
     } else {
       // MTP device: delete by track ID
@@ -740,6 +775,7 @@ Alpine.data('app', () => ({
     } else {
       await this.loadMountTracks(this.selectedMount.mount_path)
     }
+    await this.invalidateMountSearchCache()
   },
 
   // ─── Transfer ────────────────────────────────────────────────────────────
@@ -941,6 +977,7 @@ Alpine.data('app', () => ({
     }
 
     // Refresh view after copy
+    await this.invalidateMountSearchCache()
     if (this.viewMode === 'folder') {
       await this.loadFolderContents(this.selectedMount.mount_path, destination)
     } else {
@@ -949,6 +986,7 @@ Alpine.data('app', () => ({
     this.loadDiskUsage(this.selectedMount.mount_path)
     this.isTransferring = false
     this.finishTransfer()
+    if (this.isDeviceSearchActive) await this.runDeviceSearch()
     this.cancelTransferRequested = false
   },
 

@@ -5,6 +5,8 @@
 
 use std::path::Path;
 use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::Mutex;
 use tauri::Emitter;
 
 use crate::error::AppError;
@@ -145,6 +147,42 @@ pub fn get_tracks(mount_path: &str) -> Result<Vec<MountTrack>, AppError> {
     let mut tracks = Vec::new();
     walk_audio_files(base, base, &mut tracks)?;
     Ok(tracks)
+}
+
+/// Search a cached recursive library index. The index is built on first use.
+pub fn search_tracks(
+    mount_path: &str,
+    query: &str,
+    format: &str,
+    cache: &Arc<Mutex<HashMap<String, Vec<MountTrack>>>>,
+) -> Result<Vec<MountTrack>, AppError> {
+    let tracks = {
+        let mut index = cache.lock().unwrap();
+        if !index.contains_key(mount_path) {
+            index.insert(mount_path.to_string(), get_tracks(mount_path)?);
+        }
+        index.get(mount_path).cloned().unwrap_or_default()
+    };
+
+    let query = query.trim().to_lowercase();
+    let format = format.trim().to_lowercase();
+    Ok(tracks.into_iter().filter(|track| {
+        let track_format = track.filetype.to_lowercase();
+        if format != "all" && track_format != format {
+            return false;
+        }
+        if query.is_empty() {
+            return true;
+        }
+        [
+            track.title.as_deref().unwrap_or(""),
+            track.artist.as_deref().unwrap_or(""),
+            track.album.as_deref().unwrap_or(""),
+            &track.id,
+        ]
+        .iter()
+        .any(|value| value.to_lowercase().contains(&query))
+    }).collect())
 }
 
 /// Copy a file onto the mounted device. `dest_dir` is the mount path root;

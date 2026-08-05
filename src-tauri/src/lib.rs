@@ -8,6 +8,7 @@ mod metadata;
 mod mtp;
 
 use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
 use tauri::Emitter;
 use error::AppError;
 
@@ -18,6 +19,7 @@ pub struct AppState {
     pub audio: Arc<Mutex<audio::AudioPlayer>>,
     /// Temp files created during conversion; cleaned up on exit.
     pub temp_files: Arc<Mutex<Vec<String>>>,
+    pub mount_search_cache: Arc<Mutex<HashMap<String, Vec<fs::MountTrack>>>>,
 }
 
 // ─── Tauri commands ───────────────────────────────────────────────────────────
@@ -273,6 +275,31 @@ async fn get_mount_tracks(mount_path: String) -> Result<Vec<fs::MountTrack>, App
     fs::get_tracks(&mount_path)
 }
 
+/// Search the cached recursive library for a mounted device.
+#[tauri::command]
+async fn search_mount_tracks(
+    state: tauri::State<'_, AppState>,
+    mount_path: String,
+    query: String,
+    format: String,
+) -> Result<Vec<fs::MountTrack>, AppError> {
+    let cache = Arc::clone(&state.mount_search_cache);
+    tauri::async_runtime::spawn_blocking(move || {
+        fs::search_tracks(&mount_path, &query, &format, &cache)
+    })
+    .await
+    .map_err(|e| AppError::Task(e.to_string()))?
+}
+
+#[tauri::command]
+async fn clear_mount_search_cache(
+    state: tauri::State<'_, AppState>,
+    mount_path: String,
+) -> Result<(), AppError> {
+    state.mount_search_cache.lock().unwrap().remove(&mount_path);
+    Ok(())
+}
+
 /// List contents of a single directory within a mount (folder view).
 #[tauri::command]
 async fn get_folder_contents(
@@ -366,6 +393,7 @@ pub fn run() {
             mtp:        Arc::new(Mutex::new(mtp::MtpManager::new())),
             audio:      Arc::new(Mutex::new(audio::AudioPlayer::new())),
             temp_files: Arc::new(Mutex::new(Vec::new())),
+            mount_search_cache: Arc::new(Mutex::new(HashMap::new())),
         })
         .invoke_handler(tauri::generate_handler![
             scan_device,
@@ -389,6 +417,8 @@ pub fn run() {
             detect_mounts,
             scan_mount_device,
             get_mount_tracks,
+            search_mount_tracks,
+            clear_mount_search_cache,
             get_folder_contents,
             copy_to_device,
             delete_mount_file,
