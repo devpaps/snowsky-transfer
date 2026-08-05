@@ -272,13 +272,17 @@ async fn ffmpeg_available() -> bool {
 /// Detect mounted removable drives that contain audio files.
 #[tauri::command]
 async fn detect_mounts() -> Result<Vec<fs::MountDevice>, AppError> {
-    fs::detect_mounts()
+    tauri::async_runtime::spawn_blocking(fs::detect_mounts)
+        .await
+        .map_err(|e| AppError::Task(e.to_string()))?
 }
 
 /// Scan a specific mount path and return device info.
 #[tauri::command]
 async fn scan_mount_device(mount_path: String) -> Result<Option<fs::MountDevice>, AppError> {
-    fs::scan_mount(&mount_path)
+    tauri::async_runtime::spawn_blocking(move || fs::scan_mount(&mount_path))
+        .await
+        .map_err(|e| AppError::Task(e.to_string()))?
 }
 
 /// Check whether a mounted device path is still available.
@@ -290,7 +294,9 @@ async fn mount_device_present(mount_path: String) -> Result<bool, AppError> {
 /// List all audio tracks on a mounted device.
 #[tauri::command]
 async fn get_mount_tracks(mount_path: String) -> Result<Vec<fs::MountTrack>, AppError> {
-    fs::get_tracks(&mount_path)
+    tauri::async_runtime::spawn_blocking(move || fs::get_tracks(&mount_path))
+        .await
+        .map_err(|e| AppError::Task(e.to_string()))?
 }
 
 /// Search the cached recursive library for a mounted device.
@@ -324,7 +330,9 @@ async fn get_folder_contents(
     mount_path: String,
     sub_path:   String,
 ) -> Result<fs::FolderContents, AppError> {
-    fs::list_directory(&mount_path, &sub_path)
+    tauri::async_runtime::spawn_blocking(move || fs::list_directory(&mount_path, &sub_path))
+        .await
+        .map_err(|e| AppError::Task(e.to_string()))?
 }
 
 /// Copy a file onto a mounted device (supports progress events).
@@ -384,7 +392,9 @@ async fn get_disk_usage(mount_path: String) -> Result<fs::DiskUsage, AppError> {
 /// find all audio files inside. Used for drag-drop of folders.
 #[tauri::command]
 async fn expand_audio_path(path: String) -> Result<Vec<String>, AppError> {
-    fs::expand_audio_path(&path)
+    tauri::async_runtime::spawn_blocking(move || fs::expand_audio_path(&path))
+        .await
+        .map_err(|e| AppError::Task(e.to_string()))?
 }
 
 /// Create a directory and all parents on a mounted device.
