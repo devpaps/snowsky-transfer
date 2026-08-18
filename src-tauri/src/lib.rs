@@ -8,7 +8,7 @@ mod metadata;
 mod mtp;
 
 use std::sync::{Arc, Mutex};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use tauri::Emitter;
 use error::AppError;
 
@@ -19,7 +19,7 @@ pub struct AppState {
     pub audio: Arc<Mutex<audio::AudioPlayer>>,
     /// Temp files created during conversion; cleaned up on exit.
     pub temp_files: Arc<Mutex<Vec<String>>>,
-    pub mount_search_cache: Arc<Mutex<HashMap<String, Vec<fs::MountTrack>>>>,
+    pub mount_search_cache: Arc<Mutex<HashMap<String, Vec<fs::IndexedTrack>>>>,
 }
 
 // ─── Tauri commands ───────────────────────────────────────────────────────────
@@ -107,10 +107,13 @@ async fn send_tracks(
             }
         }
 
-        // Clean up any temp conversion files
+        // Clean up only the temp conversion files used by this transfer.
+        // Other entries belong to unrelated conversions (e.g. mount transfers).
+        let used: HashSet<&String> = tracks.iter().map(|req| &req.path).collect();
         let mut tf = temp_files.lock().unwrap();
-        for path in tf.drain(..) {
-            let _ = std::fs::remove_file(&path);
+        tf.retain(|path| !used.contains(path));
+        for path in used {
+            let _ = std::fs::remove_file(path);
         }
 
         Ok(new_ids)
@@ -141,7 +144,9 @@ async fn get_local_metadata(path: String) -> Result<metadata::TrackMetadata, App
 
 #[tauri::command]
 async fn get_local_file_size(path: String) -> Result<u64, AppError> {
-    Ok(std::fs::metadata(path)?.len())
+    tauri::async_runtime::spawn_blocking(move || Ok(std::fs::metadata(path)?.len()))
+        .await
+        .map_err(|e| AppError::Task(e.to_string()))?
 }
 
 /// Read cover art for a single track, lazy-loaded on demand.
@@ -178,12 +183,6 @@ async fn preview_track(
 async fn stop_preview(state: tauri::State<'_, AppState>) -> Result<(), AppError> {
     state.audio.lock().unwrap().stop();
     Ok(())
-}
-
-/// Whether a preview is currently playing.
-#[tauri::command]
-async fn preview_is_playing(state: tauri::State<'_, AppState>) -> Result<bool, AppError> {
-    Ok(state.audio.lock().unwrap().is_playing())
 }
 
 /// Convert an audio file and return the path to the converted temp file.
@@ -247,7 +246,9 @@ async fn scan_mount_device(mount_path: String) -> Result<Option<fs::MountDevice>
 /// Check whether a mounted device path is still available.
 #[tauri::command]
 async fn mount_device_present(mount_path: String) -> Result<bool, AppError> {
-    Ok(fs::mount_present(&mount_path))
+    tauri::async_runtime::spawn_blocking(move || fs::mount_present(&mount_path))
+        .await
+        .map_err(|e| AppError::Task(e.to_string()))
 }
 
 /// List all audio tracks on a mounted device.
@@ -314,7 +315,9 @@ async fn copy_to_device(
 /// Delete a file on a mounted device.
 #[tauri::command]
 async fn delete_mount_file(path: String) -> Result<(), AppError> {
-    fs::delete_file(&path)
+    tauri::async_runtime::spawn_blocking(move || fs::delete_file(&path))
+        .await
+        .map_err(|e| AppError::Task(e.to_string()))?
 }
 
 #[tauri::command]
@@ -338,13 +341,17 @@ async fn rename_mount_files(
 /// Recursively delete a folder on a mounted device.
 #[tauri::command]
 async fn delete_mount_folder(path: String) -> Result<(), AppError> {
-    fs::delete_folder(&path)
+    tauri::async_runtime::spawn_blocking(move || fs::delete_folder(&path))
+        .await
+        .map_err(|e| AppError::Task(e.to_string()))?
 }
 
 /// Get disk usage (total / used / free) for a mount path.
 #[tauri::command]
 async fn get_disk_usage(mount_path: String) -> Result<fs::DiskUsage, AppError> {
-    fs::disk_usage(&mount_path)
+    tauri::async_runtime::spawn_blocking(move || fs::disk_usage(&mount_path))
+        .await
+        .map_err(|e| AppError::Task(e.to_string()))?
 }
 
 /// If path is an audio file, return it. If it's a directory, recursively
@@ -359,7 +366,9 @@ async fn expand_audio_path(path: String) -> Result<Vec<String>, AppError> {
 /// Create a directory and all parents on a mounted device.
 #[tauri::command]
 async fn create_dir_all(path: String) -> Result<(), AppError> {
-    fs::create_dir_all(&path)
+    tauri::async_runtime::spawn_blocking(move || fs::create_dir_all(&path))
+        .await
+        .map_err(|e| AppError::Task(e.to_string()))?
 }
 
 #[tauri::command]
@@ -395,7 +404,6 @@ pub fn run() {
             update_local_metadata,
             preview_track,
             stop_preview,
-            preview_is_playing,
             convert_audio,
             cleanup_temp_file,
             ffmpeg_available,

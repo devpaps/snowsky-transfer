@@ -23,8 +23,20 @@ pub struct TrackMetadata {
     pub cover_art: Option<String>,
 }
 
-/// Read all metadata from an audio file.
+/// Read all metadata from an audio file, including cover art.
 pub fn read(path: &str) -> Result<TrackMetadata, AppError> {
+    read_impl(path, true)
+}
+
+/// Read metadata from an audio file, skipping cover art.
+///
+/// Used for bulk scans where the cover is lazy-loaded separately; avoids the
+/// allocation + base64 encoding of every embedded picture.
+pub fn read_tags(path: &str) -> Result<TrackMetadata, AppError> {
+    read_impl(path, false)
+}
+
+fn read_impl(path: &str, include_cover: bool) -> Result<TrackMetadata, AppError> {
     let tagged = Probe::open(path)
         .map_err(|e| AppError::Metadata(e.to_string()))?
         .read()
@@ -37,20 +49,23 @@ pub fn read(path: &str) -> Result<TrackMetadata, AppError> {
     let (title, artist, album, genre, year, track_number, cover_art) = match tag {
         None => (None, None, None, None, None, None, None),
         Some(t) => {
-            let cover_art = t
-                .pictures()
-                .iter()
-                .find(|p| p.pic_type() == PictureType::CoverFront)
-                .or_else(|| t.pictures().first())
-                .map(|p| {
-                    let mime = match p.mime_type() {
-                        Some(MimeType::Jpeg) => "image/jpeg",
-                        Some(MimeType::Png) => "image/png",
-                        _ => "image/jpeg",
-                    };
-                    let b64 = base64::engine::general_purpose::STANDARD.encode(p.data());
-                    format!("data:{mime};base64,{b64}")
-                });
+            let cover_art = if include_cover {
+                t.pictures()
+                    .iter()
+                    .find(|p| p.pic_type() == PictureType::CoverFront)
+                    .or_else(|| t.pictures().first())
+                    .map(|p| {
+                        let mime = match p.mime_type() {
+                            Some(MimeType::Jpeg) => "image/jpeg",
+                            Some(MimeType::Png) => "image/png",
+                            _ => "image/jpeg",
+                        };
+                        let b64 = base64::engine::general_purpose::STANDARD.encode(p.data());
+                        format!("data:{mime};base64,{b64}")
+                    })
+            } else {
+                None
+            };
 
             (
                 t.title().map(|s| s.to_string()),

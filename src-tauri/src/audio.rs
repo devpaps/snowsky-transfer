@@ -69,10 +69,6 @@ impl AudioPlayer {
             let _ = h.join();
         }
     }
-
-    pub fn is_playing(&self) -> bool {
-        self.handle.as_ref().map(|h| !h.is_finished()).unwrap_or(false)
-    }
 }
 
 impl Drop for AudioPlayer {

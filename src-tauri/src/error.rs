@@ -11,9 +11,6 @@ pub enum AppError {
     #[error("Converter error: {0}")]
     Converter(String),
 
-    #[error("Audio error: {0}")]
-    Audio(String),
-
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 

@@ -75,6 +75,31 @@ pub struct DirEntry {
     pub audio_size_bytes: u64,
 }
 
+/// A `MountTrack` with pre-lowercased search fields, stored in the search
+/// index cache so filtering never re-lowercases per query.
+pub struct IndexedTrack {
+    pub track:       MountTrack,
+    pub lc_title:    String,
+    pub lc_artist:   String,
+    pub lc_album:    String,
+    pub lc_filetype: String,
+    pub lc_id:       String,
+}
+
+impl IndexedTrack {
+    fn new(track: MountTrack) -> Self {
+        let lower = |s: &str| s.to_lowercase();
+        Self {
+            lc_title:    track.title.as_deref().map(lower).unwrap_or_default(),
+            lc_artist:   track.artist.as_deref().map(lower).unwrap_or_default(),
+            lc_album:    track.album.as_deref().map(lower).unwrap_or_default(),
+            lc_filetype: lower(&track.filetype),
+            lc_id:       lower(&track.id),
+            track,
+        }
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct FolderContents {
     pub directories: Vec<DirEntry>,
@@ -172,50 +197,64 @@ pub fn get_tracks(mount_path: &str) -> Result<Vec<MountTrack>, AppError> {
         return Ok(Vec::new());
     }
     let mut tracks = Vec::new();
-    walk_audio_files(base, base, &mut tracks)?;
+    walk_audio_files(base, base, &mut tracks, true)?;
     Ok(tracks)
 }
 
-/// Search a cached recursive library index. The index is built on first use.
-/// Cover art is stripped from results and lazy-loaded on demand.
+/// Search a cached recursive library index. The index is built on first use,
+/// without cover art; covers are lazy-loaded on demand via `get_track_cover`.
 pub fn search_tracks(
     mount_path: &str,
     query: &str,
     format: &str,
-    cache: &Arc<Mutex<HashMap<String, Vec<MountTrack>>>>,
+    cache: &Arc<Mutex<HashMap<String, Vec<IndexedTrack>>>>,
 ) -> Result<Vec<MountTrack>, AppError> {
     let query = query.trim().to_lowercase();
     let format = format.trim().to_lowercase();
-    let mut index = cache.lock().unwrap();
-    if !index.contains_key(mount_path) {
-        index.insert(mount_path.to_string(), get_tracks(mount_path)?);
+
+    {
+        let index = cache.lock().unwrap();
+        if !index.contains_key(mount_path) {
+            // Build the index outside the lock: scanning a large library parses
+            // every file's metadata and must not block concurrent commands.
+            drop(index);
+            let built = index_tracks(mount_path)?;
+            cache
+                .lock()
+                .unwrap()
+                .entry(mount_path.to_string())
+                .or_insert(built);
+        }
     }
+
+    let index = cache.lock().unwrap();
     let tracks = index.get(mount_path).expect("index populated above");
     Ok(tracks
         .iter()
-        .filter(|track| {
-            let track_format = track.filetype.to_lowercase();
-            if format != "all" && track_format != format {
+        .filter(|entry| {
+            if format != "all" && entry.lc_filetype != format {
                 return false;
             }
             if query.is_empty() {
                 return true;
             }
-            [
-                track.title.as_deref().unwrap_or(""),
-                track.artist.as_deref().unwrap_or(""),
-                track.album.as_deref().unwrap_or(""),
-                &track.id,
-            ]
-            .iter()
-            .any(|value| value.to_lowercase().contains(&query))
+            entry.lc_title.contains(&query)
+                || entry.lc_artist.contains(&query)
+                || entry.lc_album.contains(&query)
+                || entry.lc_id.contains(&query)
         })
-        .cloned()
-        .map(|mut track| {
-            track.cover_art = None;
-            track
-        })
+        .map(|entry| entry.track.clone())
         .collect())
+}
+
+fn index_tracks(mount_path: &str) -> Result<Vec<IndexedTrack>, AppError> {
+    let base = Path::new(mount_path);
+    if !base.exists() {
+        return Ok(Vec::new());
+    }
+    let mut tracks = Vec::new();
+    walk_audio_files(base, base, &mut tracks, false)?;
+    Ok(tracks.into_iter().map(IndexedTrack::new).collect())
 }
 
 /// Copy a file onto the mounted device. `dest_dir` is the mount path root;
@@ -413,8 +452,7 @@ pub fn list_directory(mount_root: &str, sub_path: &str) -> Result<FolderContents
         };
 
         if path.is_dir() {
-            let file_count = count_audio_files(&path);
-            let audio_size_bytes = audio_directory_size(&path);
+            let (file_count, audio_size_bytes) = dir_stats(&path);
             directories.push(DirEntry {
                 name,
                 rel_path: rel,
@@ -422,27 +460,7 @@ pub fn list_directory(mount_root: &str, sub_path: &str) -> Result<FolderContents
                 audio_size_bytes,
             });
         } else if path.is_file() && is_audio_ext(&path) {
-            let file_size = std::fs::metadata(&path)?.len();
-            let meta = metadata::read(&path.to_string_lossy()).ok();
-
-            files.push(MountTrack {
-                id: rel.clone(),
-                path: path.to_string_lossy().to_string(),
-                title: meta.as_ref().and_then(|m| m.title.clone()),
-                artist: meta.as_ref().and_then(|m| m.artist.clone()),
-                album: meta.as_ref().and_then(|m| m.album.clone()),
-                genre: meta.as_ref().and_then(|m| m.genre.clone()),
-                year: meta.as_ref().and_then(|m| m.year),
-                track_number: meta.as_ref().and_then(|m| m.track_number),
-                duration_ms: meta.as_ref().map(|m| m.duration_ms).unwrap_or(0),
-                filetype: path
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .unwrap_or("")
-                    .to_string(),
-                file_size,
-                cover_art: meta.and_then(|m| m.cover_art),
-            });
+            files.push(build_track(&path, rel, true)?);
         }
     }
 
@@ -470,39 +488,53 @@ pub fn list_directory(mount_root: &str, sub_path: &str) -> Result<FolderContents
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
 
-fn walk_audio_files(base: &Path, dir: &Path, tracks: &mut Vec<MountTrack>) -> Result<(), AppError> {
+fn build_track(path: &Path, rel: String, include_cover: bool) -> Result<MountTrack, AppError> {
+    let file_size = std::fs::metadata(path)?.len();
+    let meta = if include_cover {
+        metadata::read(&path.to_string_lossy())
+    } else {
+        metadata::read_tags(&path.to_string_lossy())
+    }
+    .ok();
+
+    Ok(MountTrack {
+        id: rel,
+        path: path.to_string_lossy().to_string(),
+        title: meta.as_ref().and_then(|m| m.title.clone()),
+        artist: meta.as_ref().and_then(|m| m.artist.clone()),
+        album: meta.as_ref().and_then(|m| m.album.clone()),
+        genre: meta.as_ref().and_then(|m| m.genre.clone()),
+        year: meta.as_ref().and_then(|m| m.year),
+        track_number: meta.as_ref().and_then(|m| m.track_number),
+        duration_ms: meta.as_ref().map(|m| m.duration_ms).unwrap_or(0),
+        filetype: path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_string(),
+        file_size,
+        cover_art: meta.and_then(|m| m.cover_art),
+    })
+}
+
+fn walk_audio_files(
+    base: &Path,
+    dir: &Path,
+    tracks: &mut Vec<MountTrack>,
+    include_cover: bool,
+) -> Result<(), AppError> {
     for entry in std::fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
         if path.is_dir() {
-            walk_audio_files(base, &path, tracks)?;
+            walk_audio_files(base, &path, tracks, include_cover)?;
         } else if is_audio_ext(&path) {
             let rel = path
                 .strip_prefix(base)
                 .unwrap_or(&path)
                 .to_string_lossy()
                 .to_string();
-            let file_size = std::fs::metadata(&path)?.len();
-            let meta = metadata::read(&path.to_string_lossy()).ok();
-
-            tracks.push(MountTrack {
-                id: rel.clone(),
-                path: path.to_string_lossy().to_string(),
-                title: meta.as_ref().and_then(|m| m.title.clone()),
-                artist: meta.as_ref().and_then(|m| m.artist.clone()),
-                album: meta.as_ref().and_then(|m| m.album.clone()),
-                genre: meta.as_ref().and_then(|m| m.genre.clone()),
-                year: meta.as_ref().and_then(|m| m.year),
-                track_number: meta.as_ref().and_then(|m| m.track_number),
-                duration_ms: meta.as_ref().map(|m| m.duration_ms).unwrap_or(0),
-                filetype: path
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .unwrap_or("")
-                    .to_string(),
-                file_size,
-                cover_art: meta.and_then(|m| m.cover_art),
-            });
+            tracks.push(build_track(&path, rel, include_cover)?);
         }
     }
     Ok(())
@@ -554,7 +586,7 @@ fn collect(dir: &Path, out: &mut Vec<(String, Option<u32>)>) -> Result<(), AppEr
         if path.is_dir() {
             collect(&path, out)?;
         } else if is_audio_ext(&path) {
-            let track = metadata::read(&path.to_string_lossy())
+            let track = metadata::read_tags(&path.to_string_lossy())
                 .ok()
                 .and_then(|m| m.track_number);
             out.push((path.to_string_lossy().to_string(), track));
@@ -578,21 +610,24 @@ fn count_audio_files(dir: &Path) -> usize {
     count
 }
 
-fn audio_directory_size(dir: &Path) -> u64 {
+/// Count audio files and their total size in a directory tree in one walk.
+fn dir_stats(dir: &Path) -> (usize, u64) {
+    let mut count = 0;
     let mut size = 0;
     if let Ok(rd) = std::fs::read_dir(dir) {
         for entry in rd.flatten() {
             let path = entry.path();
             if path.is_dir() {
-                size += audio_directory_size(&path);
+                let (c, s) = dir_stats(&path);
+                count += c;
+                size += s;
             } else if is_audio_ext(&path) {
-                let metadata = match std::fs::metadata(&path) {
-                    Ok(metadata) => metadata,
-                    Err(_) => continue,
-                };
-                size += metadata.len();
+                count += 1;
+                if let Ok(metadata) = std::fs::metadata(&path) {
+                    size += metadata.len();
+                }
             }
         }
     }
-    size
+    (count, size)
 }
