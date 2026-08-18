@@ -144,6 +144,15 @@ async fn get_local_file_size(path: String) -> Result<u64, AppError> {
     Ok(std::fs::metadata(path)?.len())
 }
 
+/// Read cover art for a single track, lazy-loaded on demand.
+#[tauri::command]
+async fn get_track_cover(path: String) -> Result<Option<String>, AppError> {
+    let meta = tauri::async_runtime::spawn_blocking(move || metadata::read(&path))
+        .await
+        .map_err(|e| AppError::Task(e.to_string()))??;
+    Ok(meta.cover_art)
+}
+
 /// Write updated metadata back to a local audio file.
 #[tauri::command]
 async fn update_local_metadata(
@@ -175,56 +184,6 @@ async fn stop_preview(state: tauri::State<'_, AppState>) -> Result<(), AppError>
 #[tauri::command]
 async fn preview_is_playing(state: tauri::State<'_, AppState>) -> Result<bool, AppError> {
     Ok(state.audio.lock().unwrap().is_playing())
-}
-
-/// List playlists on the device.
-#[tauri::command]
-async fn get_playlists(state: tauri::State<'_, AppState>) -> Result<Vec<mtp::Playlist>, AppError> {
-    let mtp = Arc::clone(&state.mtp);
-    tauri::async_runtime::spawn_blocking(move || mtp.lock().unwrap().get_playlists())
-        .await
-        .map_err(|e| AppError::Task(e.to_string()))?
-}
-
-/// Create a new playlist.
-#[tauri::command]
-async fn create_playlist(
-    state:    tauri::State<'_, AppState>,
-    name:     String,
-    track_ids: Vec<u32>,
-) -> Result<u32, AppError> {
-    let mtp = Arc::clone(&state.mtp);
-    tauri::async_runtime::spawn_blocking(move || mtp.lock().unwrap().create_playlist(&name, &track_ids))
-        .await
-        .map_err(|e| AppError::Task(e.to_string()))?
-}
-
-/// Update an existing playlist.
-#[tauri::command]
-async fn update_playlist(
-    state:       tauri::State<'_, AppState>,
-    playlist_id: u32,
-    name:        String,
-    track_ids:   Vec<u32>,
-) -> Result<(), AppError> {
-    let mtp = Arc::clone(&state.mtp);
-    tauri::async_runtime::spawn_blocking(move || {
-        mtp.lock().unwrap().update_playlist(playlist_id, &name, &track_ids)
-    })
-    .await
-    .map_err(|e| AppError::Task(e.to_string()))?
-}
-
-/// Delete a playlist (tracks remain on the device).
-#[tauri::command]
-async fn delete_playlist(
-    state:       tauri::State<'_, AppState>,
-    playlist_id: u32,
-) -> Result<(), AppError> {
-    let mtp = Arc::clone(&state.mtp);
-    tauri::async_runtime::spawn_blocking(move || mtp.lock().unwrap().delete_playlist(playlist_id))
-        .await
-        .map_err(|e| AppError::Task(e.to_string()))?
 }
 
 /// Convert an audio file and return the path to the converted temp file.
@@ -432,14 +391,11 @@ pub fn run() {
             delete_track,
             get_local_metadata,
             get_local_file_size,
+            get_track_cover,
             update_local_metadata,
             preview_track,
             stop_preview,
             preview_is_playing,
-            get_playlists,
-            create_playlist,
-            update_playlist,
-            delete_playlist,
             convert_audio,
             cleanup_temp_file,
             ffmpeg_available,

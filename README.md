@@ -14,7 +14,6 @@ Snowsky Transfer is a Linux desktop application built with Tauri 2 for transferr
 - Edit metadata including title, artist, album, genre, year, track number, and cover art
 - Preview local audio files
 - Manage and delete tracks on the device
-- Create, update, and delete playlists
 - Warn when the device is disconnected or powered off
 - Show transfer progress with automatic and manual notification dismissal
 - Follow the system light or dark theme

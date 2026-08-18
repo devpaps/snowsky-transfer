@@ -51,7 +51,7 @@
         </svg>
         <span>Snowsky Transfer</span>
         <span class="text-xs font-normal text-gray-500 dark:text-gray-400"
-          >v0.1.1 beta</span
+          >v0.1.2 beta</span
         >
       </div>
 
@@ -459,6 +459,19 @@
             >
           </span>
           <span class="flex-1"></span>
+          <label
+            x-show="selectedMount"
+            class="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300 cursor-pointer select-none"
+            title="Copy each track into Genres/<Genre>/ folders on the device"
+          >
+            <input
+              type="checkbox"
+              x-model="createGenreFolders"
+              @change="toggleGenreFolders()"
+              class="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-700 accent-violet-600"
+            />
+            <span>Genre folders</span>
+          </label>
           <button
             x-show="activeSyncProfileId"
             @click="scanSavedProfile()"
@@ -511,17 +524,6 @@
             <span
               x-text="`(${isDeviceSearchActive ? filteredDeviceTracks.length : (selectedMount && viewMode === 'folder' ? folderContents.directories.length + folderContents.files.length : deviceTracks.length)})`"
             ></span>
-          </button>
-
-          <button
-            @click="activeDeviceTab = 'playlists'"
-            x-show="!selectedMount"
-            class="px-4 py-2 text-xs font-medium border-b-2 transition-colors hover:cursor-pointer"
-            :class="activeDeviceTab === 'playlists'
-          ? 'border-violet-600 text-violet-600 dark:text-violet-400'
-          : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'"
-          >
-            Playlists (<span x-text="devicePlaylists.length"></span>)
           </button>
 
           <span class="flex-1"></span>
@@ -583,14 +585,6 @@
               </div>
             </template>
 
-            <button
-              x-show="selectedDevice.size > 0 && !selectedMount"
-              @click="openNewPlaylist()"
-              class="px-2.5 py-1 text-xs rounded-md bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
-              title="Create playlist from selected tracks"
-            >
-              + Playlist
-            </button>
             <button
               x-show="selectedDevice.size > 0"
               @click="deleteSelectedDeviceTracks()"
@@ -1099,7 +1093,7 @@
             <!-- Empty device -->
             <div
               x-show="(device || (selectedMount && (viewMode === 'flat' || isDeviceSearchActive))) && !isLoadingDevice && !isLoadingSearchLibrary && filteredDeviceTracks.length === 0"
-              class="flex flex-col items-center justify-center h-full gap-2 text-gray-400 dark:text-gray-600"
+              class="flex flex-col items-center mt-24 justify-center h-full gap-2 text-gray-400 dark:text-gray-600"
             >
               <p
                 class="text-sm"
@@ -1147,10 +1141,12 @@
 
                 <div
                   class="w-8 h-8 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 text-xs shrink-0 overflow-hidden"
+                  x-init="observeCover($el, track)"
                 >
                   <template x-if="track.cover_art">
                     <img
                       :src="track.cover_art"
+                      loading="lazy"
                       class="w-full h-full object-cover"
                       alt=""
                     />
@@ -1236,43 +1232,6 @@
               </div>
             </template>
           </div>
-        </div>
-
-        <!-- Playlists tab -->
-        <div
-          x-show="activeDeviceTab === 'playlists'"
-          class="flex-1 overflow-y-auto"
-        >
-          <div
-            x-show="devicePlaylists.length === 0"
-            class="flex items-center justify-center h-full text-gray-400 dark:text-gray-600 text-sm"
-          >
-            No playlists
-          </div>
-          <template x-for="pl in devicePlaylists" :key="pl.id">
-            <div
-              class="flex items-center gap-3 px-3 py-3 border-b border-gray-100 dark:border-gray-800/60 hover:bg-gray-50 dark:hover:bg-gray-900/40"
-            >
-              <div
-                class="w-8 h-8 rounded bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center text-violet-500 text-xs shrink-0"
-              >
-                ☰
-              </div>
-              <div class="flex-1 min-w-0">
-                <p class="truncate font-medium text-xs" x-text="pl.name"></p>
-                <p
-                  class="text-xs text-gray-400"
-                  x-text="`${pl.track_ids.length} tracks`"
-                ></p>
-              </div>
-              <button
-                @click="deletePlaylist(pl.id)"
-                class="text-xs text-gray-400 hover:text-red-500 transition-colors px-1"
-              >
-                ✕
-              </button>
-            </div>
-          </template>
         </div>
       </section>
     </main>
@@ -1632,49 +1591,6 @@
             class="px-4 py-1.5 text-sm rounded-lg bg-violet-600 hover:bg-violet-700 text-white font-medium transition-colors"
           >
             Convert
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ══════════════════════════════════════════════════════════════
-     MODAL: New playlist
-═══════════════════════════════════════════════════════════════ -->
-    <div
-      x-show="plModal"
-      x-cloak
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-      @keydown.escape.window="plModal = false"
-    >
-      <div
-        @click.stop
-        class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-xs p-6 border border-gray-200 dark:border-gray-700"
-      >
-        <h2 class="font-semibold text-base mb-4">New playlist</h2>
-        <input
-          x-model="plName"
-          type="text"
-          placeholder="Playlist name…"
-          @keydown.enter="savePlaylist()"
-          class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-violet-500"
-        />
-        <p
-          class="text-xs text-gray-400 mb-4"
-          x-text="`${plTracks.length} selected tracks will be added`"
-        ></p>
-        <div class="flex gap-3 justify-end">
-          <button
-            @click="plModal = false"
-            class="px-4 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            @click="savePlaylist()"
-            :disabled="!plName.trim()"
-            class="px-4 py-1.5 text-sm rounded-lg bg-violet-600 hover:bg-violet-700 text-white font-medium transition-colors disabled:opacity-40"
-          >
-            Create
           </button>
         </div>
       </div>

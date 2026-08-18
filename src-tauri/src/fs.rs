@@ -177,39 +177,45 @@ pub fn get_tracks(mount_path: &str) -> Result<Vec<MountTrack>, AppError> {
 }
 
 /// Search a cached recursive library index. The index is built on first use.
+/// Cover art is stripped from results and lazy-loaded on demand.
 pub fn search_tracks(
     mount_path: &str,
     query: &str,
     format: &str,
     cache: &Arc<Mutex<HashMap<String, Vec<MountTrack>>>>,
 ) -> Result<Vec<MountTrack>, AppError> {
-    let tracks = {
-        let mut index = cache.lock().unwrap();
-        if !index.contains_key(mount_path) {
-            index.insert(mount_path.to_string(), get_tracks(mount_path)?);
-        }
-        index.get(mount_path).cloned().unwrap_or_default()
-    };
-
     let query = query.trim().to_lowercase();
     let format = format.trim().to_lowercase();
-    Ok(tracks.into_iter().filter(|track| {
-        let track_format = track.filetype.to_lowercase();
-        if format != "all" && track_format != format {
-            return false;
-        }
-        if query.is_empty() {
-            return true;
-        }
-        [
-            track.title.as_deref().unwrap_or(""),
-            track.artist.as_deref().unwrap_or(""),
-            track.album.as_deref().unwrap_or(""),
-            &track.id,
-        ]
+    let mut index = cache.lock().unwrap();
+    if !index.contains_key(mount_path) {
+        index.insert(mount_path.to_string(), get_tracks(mount_path)?);
+    }
+    let tracks = index.get(mount_path).expect("index populated above");
+    Ok(tracks
         .iter()
-        .any(|value| value.to_lowercase().contains(&query))
-    }).collect())
+        .filter(|track| {
+            let track_format = track.filetype.to_lowercase();
+            if format != "all" && track_format != format {
+                return false;
+            }
+            if query.is_empty() {
+                return true;
+            }
+            [
+                track.title.as_deref().unwrap_or(""),
+                track.artist.as_deref().unwrap_or(""),
+                track.album.as_deref().unwrap_or(""),
+                &track.id,
+            ]
+            .iter()
+            .any(|value| value.to_lowercase().contains(&query))
+        })
+        .cloned()
+        .map(|mut track| {
+            track.cover_art = None;
+            track
+        })
+        .collect())
 }
 
 /// Copy a file onto the mounted device. `dest_dir` is the mount path root;

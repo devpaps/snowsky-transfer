@@ -89,19 +89,6 @@ mod ffi {
     }                                          // total = 144
 
     #[repr(C)]
-    pub struct LIBMTP_playlist_t {
-        pub playlist_id: u32,
-        pub parent_id:   u32,
-        pub storage_id:  u32,
-        _pad:            u32,
-        pub name:        *mut c_char,
-        pub tracks:      *mut u32,
-        pub no_tracks:   u32,
-        _pad2:           u32,
-        pub next:        *mut LIBMTP_playlist_t,
-    }
-
-    #[repr(C)]
     pub struct LIBMTP_device_entry_t {
         pub vendor:       *mut c_char,
         pub vendor_id:    u16,
@@ -144,18 +131,6 @@ mod ffi {
 
         pub fn LIBMTP_Delete_Object(device: *mut LIBMTP_mtpdevice_t, object_id: u32) -> c_int;
 
-        pub fn LIBMTP_Get_Playlist_List(
-            device: *mut LIBMTP_mtpdevice_t,
-        ) -> *mut LIBMTP_playlist_t;
-        pub fn LIBMTP_Create_New_Playlist(
-            device:   *mut LIBMTP_mtpdevice_t,
-            metadata: *mut LIBMTP_playlist_t,
-        ) -> c_int;
-        pub fn LIBMTP_Update_Playlist(
-            device:   *mut LIBMTP_mtpdevice_t,
-            metadata: *mut LIBMTP_playlist_t,
-        ) -> c_int;
-        pub fn LIBMTP_destroy_playlist_t(playlist: *mut LIBMTP_playlist_t);
         pub fn LIBMTP_destroy_track_t(track: *mut LIBMTP_track_t);
 
         pub fn LIBMTP_Dump_Errorstack(device: *mut LIBMTP_mtpdevice_t);
@@ -266,13 +241,6 @@ pub struct Track {
     pub filesize:     u64,
     pub filetype:     String,
     pub track_number: u16,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct Playlist {
-    pub id:        u32,
-    pub name:      String,
-    pub track_ids: Vec<u32>,
 }
 
 /// Request sent from the JS side when transferring a file.
@@ -535,108 +503,6 @@ impl MtpManager {
             return Err(AppError::Mtp(format!("Failed to delete track {track_id}")));
         }
         Ok(())
-    }
-
-    /// List all playlists on the device.
-    pub fn get_playlists(&mut self) -> Result<Vec<Playlist>, AppError> {
-        let ptr = self.device_ptr()?;
-        let mut playlists = Vec::new();
-
-        unsafe {
-            let list = ffi::LIBMTP_Get_Playlist_List(ptr);
-            let mut cur = list;
-            while !cur.is_null() {
-                let next = (*cur).next;
-                let p = &*cur;
-
-                let mut track_ids = Vec::new();
-                for i in 0..p.no_tracks as usize {
-                    track_ids.push(*p.tracks.add(i));
-                }
-
-                playlists.push(Playlist {
-                    id:        p.playlist_id,
-                    name:      ptr_to_string(p.name),
-                    track_ids,
-                });
-
-                (*cur).next = std::ptr::null_mut();
-                ffi::LIBMTP_destroy_playlist_t(cur);
-                cur = next;
-            }
-        }
-
-        Ok(playlists)
-    }
-
-    /// Create a new playlist on the device.
-    pub fn create_playlist(
-        &mut self,
-        name:      &str,
-        track_ids: &[u32],
-    ) -> Result<u32, AppError> {
-        let ptr = self.device_ptr()?;
-        let name_c = CString::new(name).map_err(|e| AppError::Mtp(e.to_string()))?;
-
-        let mut ids_copy = track_ids.to_vec();
-        let tracks_ptr = if ids_copy.is_empty() {
-            std::ptr::null_mut()
-        } else {
-            ids_copy.as_mut_ptr()
-        };
-
-        let mut meta: ffi::LIBMTP_playlist_t = unsafe { std::mem::zeroed() };
-        meta.parent_id = 0xFFFF_FFFF;
-        meta.name      = name_c.as_ptr() as *mut c_char;
-        meta.tracks    = tracks_ptr;
-        meta.no_tracks = ids_copy.len() as u32;
-
-        let ret = unsafe { ffi::LIBMTP_Create_New_Playlist(ptr, &mut meta) };
-
-        if ret != 0 {
-            unsafe {
-                ffi::LIBMTP_Dump_Errorstack(ptr);
-                ffi::LIBMTP_Clear_Errorstack(ptr);
-            }
-            return Err(AppError::Mtp(format!("Failed to create playlist \"{name}\"")));
-        }
-
-        Ok(meta.playlist_id)
-    }
-
-    /// Update an existing playlist's track list.
-    pub fn update_playlist(
-        &mut self,
-        playlist_id: u32,
-        name:        &str,
-        track_ids:   &[u32],
-    ) -> Result<(), AppError> {
-        let ptr = self.device_ptr()?;
-        let name_c = CString::new(name).map_err(|e| AppError::Mtp(e.to_string()))?;
-        let mut ids_copy = track_ids.to_vec();
-
-        let mut meta: ffi::LIBMTP_playlist_t = unsafe { std::mem::zeroed() };
-        meta.parent_id = 0xFFFF_FFFF;
-        meta.playlist_id = playlist_id;
-        meta.name      = name_c.as_ptr() as *mut c_char;
-        meta.tracks    = if ids_copy.is_empty() { std::ptr::null_mut() } else { ids_copy.as_mut_ptr() };
-        meta.no_tracks = ids_copy.len() as u32;
-
-        let ret = unsafe { ffi::LIBMTP_Update_Playlist(ptr, &mut meta) };
-        if ret != 0 {
-            unsafe {
-                ffi::LIBMTP_Dump_Errorstack(ptr);
-                ffi::LIBMTP_Clear_Errorstack(ptr);
-            }
-            return Err(AppError::Mtp(format!("Failed to update playlist {playlist_id}")));
-        }
-        Ok(())
-    }
-
-    /// Delete a playlist (the tracks themselves remain on the device).
-    pub fn delete_playlist(&mut self, playlist_id: u32) -> Result<(), AppError> {
-        // MTP playlists are just objects; delete by object ID
-        self.delete_track(playlist_id)
     }
 }
 
