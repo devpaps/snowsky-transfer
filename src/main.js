@@ -131,6 +131,13 @@ Alpine.data("app", () => ({
   transferConfirmDestination: null,
   transferConfirmRefreshPath: null,
   transferConfirmAction: "transfer",
+  deleteConfirmModal: false,
+  deleteConfirmTitle: "Confirm delete",
+  deleteConfirmMessage: "",
+  deleteConfirmWarning: "",
+  deleteConfirmButton: "Delete",
+  deleteConfirmAction: null,
+  deleteConfirmBusy: false,
   connectionMonitor: null,
   connectionLost: false,
   syncSummary: null,
@@ -398,11 +405,49 @@ Alpine.data("app", () => ({
     this.selectedDevice = new Set(this.selectedDevice);
   },
 
-  async deleteFolder(relPath) {
+  openDeleteConfirm({ title, message, warning = "", button = "Delete", action }) {
+    this.deleteConfirmTitle = title;
+    this.deleteConfirmMessage = message;
+    this.deleteConfirmWarning = warning;
+    this.deleteConfirmButton = button;
+    this.deleteConfirmAction = action;
+    this.deleteConfirmBusy = false;
+    this.deleteConfirmModal = true;
+  },
+
+  closeDeleteConfirm() {
+    if (this.deleteConfirmBusy) return;
+    this.deleteConfirmModal = false;
+    this.deleteConfirmAction = null;
+  },
+
+  async runDeleteConfirm() {
+    if (!this.deleteConfirmAction || this.deleteConfirmBusy) return;
+    const action = this.deleteConfirmAction;
+    this.deleteConfirmBusy = true;
+    try {
+      await action();
+      this.deleteConfirmModal = false;
+      this.deleteConfirmAction = null;
+    } finally {
+      this.deleteConfirmBusy = false;
+    }
+  },
+
+  deleteFolder(relPath) {
     if (!this.selectedMount) return;
     const name = relPath.split("/").pop() || relPath;
-    if (!window.confirm(`Delete folder "${name}" and all its contents?`))
-      return;
+    this.openDeleteConfirm({
+      title: "Delete folder?",
+      message: `Delete "${name}" and all audio files inside it from the device? This cannot be undone.`,
+      warning: "This removes files from the connected device permanently.",
+      button: "Delete folder",
+      action: () => this.performDeleteFolder(relPath),
+    });
+  },
+
+  async performDeleteFolder(relPath) {
+    if (!this.selectedMount) return;
     const fullPath = this.selectedMount.mount_path + "/" + relPath;
     try {
       await invoke("delete_mount_folder", { path: fullPath });
@@ -608,16 +653,20 @@ Alpine.data("app", () => ({
     }
   },
 
-  async deleteSelectedDeviceTracks() {
+  deleteSelectedDeviceTracks() {
     if (!this.selectedDevice.size) return;
     const ids = [...this.selectedDevice];
-    if (
-      !window.confirm(
-        `Delete ${ids.length} selected ${ids.length === 1 ? "file" : "files"}?`,
-      )
-    )
-      return;
+    const noun = ids.length === 1 ? "file" : "files";
+    this.openDeleteConfirm({
+      title: `Delete ${ids.length} ${noun}?`,
+      message: `Delete ${ids.length} selected ${noun} from the device? This cannot be undone.`,
+      warning: "This removes files from the connected device permanently.",
+      button: ids.length === 1 ? "Delete file" : "Delete files",
+      action: () => this.performDeleteSelectedDeviceTracks(ids),
+    });
+  },
 
+  async performDeleteSelectedDeviceTracks(ids) {
     if (this.selectedMount) {
       // Mount device: delete files by path
       const base = this.selectedMount.mount_path;
@@ -1020,12 +1069,34 @@ Alpine.data("app", () => ({
   },
 
   removeLocalFile(path) {
+    const file = this.localFiles.find((item) => item.path === path);
+    this.openDeleteConfirm({
+      title: "Remove from transfer list?",
+      message: `Remove "${file?.name || path}" from the local transfer list? The file will not be deleted from disk.`,
+      warning: "This only updates the transfer list. Your local file stays on disk.",
+      button: "Remove",
+      action: () => this.performRemoveLocalFile(path),
+    });
+  },
+
+  performRemoveLocalFile(path) {
     this.localFiles = this.localFiles.filter((f) => f.path !== path);
     this.selectedLocal.delete(path);
     this.selectedLocal = new Set(this.selectedLocal);
   },
 
   clearLocalFiles() {
+    if (!this.localFiles.length) return;
+    this.openDeleteConfirm({
+      title: "Clear transfer list?",
+      message: `Remove all ${this.localFiles.length} local ${this.localFiles.length === 1 ? "file" : "files"} from the transfer list? Files will not be deleted from disk.`,
+      warning: "This only updates the transfer list. Your local files stay on disk.",
+      button: "Clear list",
+      action: () => this.performClearLocalFiles(),
+    });
+  },
+
+  performClearLocalFiles() {
     this.localFiles = [];
     this.selectedLocal = new Set();
   },

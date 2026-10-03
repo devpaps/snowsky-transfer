@@ -28,20 +28,20 @@
     @pointerup.window="endLocalPointerDrag(); endDevicePointerDrag()"
     @pointercancel.window="endLocalPointerDrag(); endDevicePointerDrag()"
     x-init="init()"
-    class="studio-shell h-full flex flex-col bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 text-sm select-none overflow-hidden"
+    class="studio-shell h-full flex flex-col text-sm select-none overflow-hidden"
   >
     <!-- ══════════════════════════════════════════════════════════════
      TOP BAR
 ═══════════════════════════════════════════════════════════════ -->
     <header
-      class="studio-header flex items-center justify-between px-4 h-12 border-b border-gray-200 dark:border-gray-800 shrink-0"
+      class="studio-header flex items-center justify-between px-4 h-12 border-b shrink-0"
     >
       <!-- Logo -->
       <div
         class="studio-brand flex items-center gap-2 font-semibold tracking-tight"
       >
         <svg
-          class="w-5 h-5 text-violet-500"
+          class="w-5 h-5"
           viewBox="0 0 24 24"
           fill="currentColor"
         >
@@ -50,7 +50,7 @@
           />
         </svg>
         <span>Snowsky Transfer</span>
-        <span class="text-xs font-normal text-gray-500 dark:text-gray-400"
+        <span class="studio-row-muted text-xs font-normal"
           >v0.1.2 beta</span
         >
       </div>
@@ -68,13 +68,13 @@
               x-text="device.name || device.model"
             ></span>
             <template x-if="device.battery_level !== null">
-              <span class="text-xs text-gray-400 dark:text-gray-500">
+              <span class="studio-row-muted text-xs">
                 ⚡<span x-text="device.battery_level"></span>%
               </span>
             </template>
             <button
               @click="disconnectDevice()"
-              class="text-xs text-gray-400 hover:text-red-500 transition-colors px-1"
+              class="studio-icon-button studio-icon-button-danger text-xs transition-colors px-1"
               title="Disconnect"
               aria-label="Disconnect device"
             >
@@ -91,18 +91,18 @@
             <!-- ></span> -->
             <span class="font-medium" x-text="selectedMount.name"></span>
             <span
-              class="text-xs text-gray-400"
+              class="studio-row-muted text-xs"
               x-text="`(${selectedMount.track_count} files)`"
             ></span>
             <template x-if="selectedMountDisk">
               <span
-                class="text-xs text-gray-400"
+                class="studio-row-muted text-xs"
                 x-text="`${fmtBytes(selectedMountDisk.used_bytes)} / ${fmtBytes(selectedMountDisk.total_bytes)}`"
               ></span>
             </template>
             <button
               @click="disconnectMount()"
-              class="text-xs text-gray-400 hover:text-red-500 transition-colors px-1"
+              class="studio-icon-button studio-icon-button-danger text-xs transition-colors px-1"
               title="Disconnect"
               aria-label="Disconnect device"
             >
@@ -111,7 +111,7 @@
             <button
               @click="safeEjectMount()"
               :disabled="isTransferring"
-              class="px-2 hover:cursor-pointer py-1 rounded-md text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
+              class="studio-button-secondary px-2 hover:cursor-pointer py-1 rounded-md border-0 text-xs disabled:opacity-50"
               title="Safely disconnect"
             >
               Eject
@@ -123,7 +123,7 @@
         <button
           @click="scanDevice()"
           :disabled="isConnecting || isScanningMounts"
-          class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium hover:cursor-pointer bg-violet-600 hover:bg-violet-700 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          class="studio-primary-button flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium hover:cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <template x-if="isConnecting || isScanningMounts">
             <svg
@@ -150,20 +150,20 @@
     <main class="studio-main flex flex-1 min-h-0">
       <!-- ── LEFT: Local files ────────────────────────────────── -->
       <section
-        class="studio-pane w-1/2 flex flex-col border-r border-gray-200 dark:border-gray-800 min-h-0"
+        class="studio-pane w-1/2 flex flex-col border-r min-h-0"
       >
         <!-- Toolbar -->
         <div
-          class="flex items-center gap-2 px-3 py-2 border-b border-gray-200 dark:border-gray-800 shrink-0"
+          class="studio-panel-bar flex items-center gap-2 px-3 py-2 border-b shrink-0"
         >
           <span
-            class="font-semibold text-xs uppercase tracking-widest text-gray-400"
+            class="studio-panel-title font-semibold text-xs uppercase tracking-widest"
             >Local files</span
           >
           <span class="flex-1"></span>
           <button
             @click="pickFiles()"
-            class="hover:cursor-pointer px-2.5 py-1 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            class="studio-toolbar-button hover:cursor-pointer px-2.5 py-1 rounded-md text-xs font-medium"
           >
             + Add files
           </button>
@@ -171,7 +171,7 @@
             x-show="selectedMount"
             @click="openProfileModal()"
             :disabled="isTransferring || isScanningSyncProfile"
-            class="px-2.5 py-1 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            class="studio-toolbar-button px-2.5 py-1 rounded-md text-xs font-medium disabled:opacity-50"
             title="Create a saved sync profile"
           >
             + Saved sync
@@ -181,7 +181,7 @@
             x-model="activeSyncProfileId"
             @change="selectSavedProfile()"
             :disabled="isTransferring || isScanningSyncProfile"
-            class="max-w-36 px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs focus:outline-none"
+            class="studio-input max-w-36 px-2 py-1 rounded-md border text-xs focus:outline-none"
             aria-label="Saved sync profile"
           >
             <option value="">Saved syncs</option>
@@ -193,7 +193,7 @@
             x-show="selectedMount && activeSyncProfileId"
             @click="deleteSyncProfile(activeSyncProfileId)"
             :disabled="isTransferring || isScanningSyncProfile"
-            class="w-7 h-7 rounded flex items-center justify-center text-gray-400 hover:text-red-400 transition-colors"
+            class="studio-icon-button studio-icon-button-danger w-7 h-7 rounded flex items-center justify-center transition-colors disabled:opacity-50"
             title="Delete saved sync profile"
             aria-label="Delete saved sync profile"
           >
@@ -202,7 +202,7 @@
           <button
             @click="selectAllLocal()"
             x-show="localFiles.length > 0"
-            class="px-2.5 py-1 rounded-md text-xs font-medium bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+            class="studio-toolbar-button px-2.5 py-1 rounded-md text-xs font-medium"
           >
             <span
               x-text="selectedLocal.size === localFiles.length ? 'Deselect all' : 'Select all'"
@@ -211,7 +211,7 @@
           <button
             @click="clearLocalFiles()"
             x-show="localFiles.length > 0"
-            class="px-2.5 py-1 rounded-md text-xs font-medium text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+            class="studio-toolbar-button-danger px-2.5 py-1 rounded-md text-xs font-medium transition-colors"
           >
             Clear
           </button>
@@ -244,12 +244,12 @@
 
         <!-- Drop zone / file list -->
         <div
-          class="flex-1 overflow-y-auto transition-all"
+          class="studio-scroll-zone flex-1 overflow-y-auto transition-all"
           :class="isDragging ? 'drop-target-active' : ''"
         >
           <div
             x-show="isScanningSyncProfile"
-            class="flex flex-col items-center justify-center h-full gap-3 text-gray-400 dark:text-gray-600"
+            class="studio-row-muted flex flex-col items-center justify-center h-full gap-3"
           >
             <svg
               class="w-7 h-7 animate-spin text-cyan-400"
@@ -261,7 +261,7 @@
               <circle cx="12" cy="12" r="9" stroke-opacity=".25" />
               <path d="M21 12a9 9 0 0 0-9-9" stroke-linecap="round" />
             </svg>
-            <p class="text-sm font-medium text-gray-300">
+            <p class="text-sm font-medium">
               Scanning music folder…
             </p>
             <p class="text-xs">
@@ -271,7 +271,7 @@
           <!-- Empty state -->
           <div
             x-show="localFiles.length === 0 && !isScanningSyncProfile"
-            class="flex flex-col items-center justify-center h-full gap-3 text-gray-400 dark:text-gray-600 pointer-events-none"
+            class="studio-row-muted flex flex-col items-center justify-center h-full gap-3 pointer-events-none"
           >
             <svg
               class="w-10 h-10"
@@ -296,13 +296,13 @@
               <div
                 @click="toggleLocalFile(file.path)"
                 @pointerenter="moveLocalPointer(file.path)"
-                class="flex items-center gap-2 px-3 py-2 border-b border-gray-100 dark:border-gray-800/60 hover:bg-gray-50 dark:hover:bg-gray-900/40 transition-colors"
+                class="studio-row flex items-center gap-2 px-3 py-2 border-b"
                 :class="draggedLocalPath === file.path && pointerDraggingLocal
-                  ? 'bg-amber-100 dark:bg-amber-900/40 ring-1 ring-amber-300 dark:ring-amber-700'
-                  : selectedLocal.has(file.path) ? 'bg-violet-50 dark:bg-violet-900/20' : ''"
+                  ? 'studio-row-dragging'
+                  : selectedLocal.has(file.path) ? 'studio-row-selected' : ''"
               >
                 <span
-                  class="text-gray-300 dark:text-gray-600 text-xs shrink-0 cursor-grab"
+                  class="studio-drag-handle text-xs shrink-0 cursor-grab"
                   @pointerdown.stop.prevent="startLocalPointerDrag(file.path)"
                   title="Drag to reorder"
                   >⋮</span
@@ -311,8 +311,8 @@
                 <div
                   class="w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors"
                   :class="selectedLocal.has(file.path)
-                ? 'bg-violet-600 border-violet-600 text-white'
-                : 'border-gray-300 dark:border-gray-600'"
+                ? 'studio-checkbox-selected'
+                : 'studio-checkbox'"
                 >
                   <svg
                     x-show="selectedLocal.has(file.path)"
@@ -332,7 +332,7 @@
 
                 <!-- Cover art -->
                 <div
-                  class="w-8 h-8 rounded bg-gray-100 dark:bg-gray-800 shrink-0 overflow-hidden"
+                  class="studio-cover w-8 h-8 rounded shrink-0 overflow-hidden"
                 >
                   <template x-if="file.meta?.cover_art">
                     <img
@@ -342,7 +342,7 @@
                   </template>
                   <template x-if="!file.meta?.cover_art">
                     <div
-                      class="w-full h-full flex items-center justify-center text-gray-400 text-xs"
+                      class="studio-cover-placeholder w-full h-full flex items-center justify-center text-xs"
                     >
                       ♪
                     </div>
@@ -356,17 +356,17 @@
                     x-text="file.meta?.title || file.name.replace(/\.[^.]+$/, '')"
                   ></p>
                   <p
-                    class="truncate text-xs text-gray-400 dark:text-gray-500"
+                    class="studio-row-muted truncate text-xs"
                     x-text="[file.meta?.artist, file.meta?.album].filter(Boolean).join(' · ') || file.name"
                   ></p>
                   <p
                     x-show="file.subPath"
-                    class="truncate text-[10px] text-gray-400 dark:text-gray-600"
+                    class="studio-row-faint truncate text-[10px]"
                     x-text="file.subPath.replace('/' + file.name, '')"
                   ></p>
                   <p
                     x-show="file.metadataError"
-                    class="truncate text-[10px] text-amber-500 dark:text-amber-400"
+                    class="studio-warning-text truncate text-[10px]"
                     :title="file.metadataError"
                   >
                     Metadata unavailable for this file
@@ -376,11 +376,11 @@
                 <!-- Duration + format -->
                 <div class="flex items-center gap-2 shrink-0 text-right">
                   <span
-                    class="text-xs text-gray-400"
+                    class="studio-row-muted text-xs"
                     x-text="file.meta ? fmtDuration(file.meta.duration_ms) : ''"
                   ></span>
                   <span
-                    class="text-[10px] font-mono uppercase px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500"
+                    class="studio-format-pill text-[10px] font-mono uppercase px-1 py-0.5 rounded"
                     x-text="file.ext"
                   ></span>
                 </div>
@@ -390,7 +390,7 @@
                   <!-- Preview -->
                   <button
                     @click="togglePreview(file.path)"
-                    class="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-violet-500 transition-colors"
+                    class="studio-icon-button w-6 h-6 rounded flex items-center justify-center transition-colors"
                     :title="previewPath === file.path && isPlaying ? 'Stop' : 'Preview'"
                   >
                     <svg
@@ -414,7 +414,7 @@
                   <!-- Edit metadata -->
                   <button
                     @click="openMetaEditor(file)"
-                    class="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-violet-500 transition-colors"
+                    class="studio-icon-button w-6 h-6 rounded flex items-center justify-center transition-colors"
                     title="Edit metadata"
                   >
                     <svg
@@ -435,7 +435,7 @@
                   <!-- Remove -->
                   <button
                     @click="removeLocalFile(file.path)"
-                    class="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors"
+                    class="studio-icon-button studio-icon-button-danger w-6 h-6 rounded flex items-center justify-center transition-colors"
                     title="Remove from list"
                   >
                     ✕
@@ -449,9 +449,9 @@
         <!-- Transfer footer -->
         <div
           x-show="selectedLocal.size > 0 || activeSyncProfileId"
-          class="flex items-center gap-3 px-3 py-2 border-t border-gray-200 dark:border-gray-800 shrink-0 bg-white dark:bg-gray-950"
+          class="studio-panel-footer flex items-center gap-3 px-3 py-2 border-t shrink-0"
         >
-          <span class="text-xs text-gray-500 leading-4">
+          <span class="studio-row-muted text-xs leading-4">
             <template x-if="activeSyncProfileId">
               <span
                 ><strong
@@ -466,13 +466,13 @@
                 ><span x-text="selectedLocal.size"></span> files selected</span
               >
             </template>
-            <span class="text-gray-400">(</span
+            <span class="studio-row-muted">(</span
             ><span
               x-show="!selectedLocalSizesLoading"
               x-text="fmtBytes(selectedLocalBytes)"
             ></span
             ><span x-show="selectedLocalSizesLoading">calculating size...</span
-            ><span class="text-gray-400">)</span>
+            ><span class="studio-row-muted">)</span>
             <template
               x-if="selectedMount && selectedMountDisk && !selectedLocalSizesLoading"
             >
@@ -486,21 +486,21 @@
             </template>
             <span
               x-show="selectedMount && !selectedMountDisk && !selectedLocalSizesLoading"
-              class="block font-medium text-gray-400"
+              class="studio-row-muted block font-medium"
               >checking device space...</span
             >
           </span>
           <span class="flex-1"></span>
           <label
             x-show="selectedMount"
-            class="flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300 cursor-pointer select-none"
+            class="studio-row-muted flex items-center gap-1.5 text-xs cursor-pointer select-none"
             title="Copy each track into Genres/<Genre>/ folders on the device"
           >
             <input
               type="checkbox"
               x-model="createGenreFolders"
               @change="toggleGenreFolders()"
-              class="w-3.5 h-3.5 rounded border-gray-300 dark:border-gray-700 accent-violet-600"
+              class="studio-checkbox-native w-3.5 h-3.5 rounded"
             />
             <span>Genre folders</span>
           </label>
@@ -508,14 +508,14 @@
             x-show="activeSyncProfileId"
             @click="scanSavedProfile()"
             :disabled="isTransferring || isScanningSyncProfile"
-            class="px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-50"
+            class="studio-button-secondary px-3 py-1.5 rounded-lg text-xs font-medium border disabled:opacity-50"
           >
             Rescan
           </button>
           <button
             @click="activeSyncProfileId ? syncSavedProfile() : confirmStartTransfer()"
             :disabled="(!device && !selectedMount) || isTransferring || (selectedMount && (selectedLocalSizesLoading || selectedLocalCapacityUnknown || selectedLocalOverCapacity))"
-            class="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold bg-violet-600 hover:bg-violet-700 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            class="studio-primary-button flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <svg
               class="w-3.5 h-3.5"
@@ -540,15 +540,13 @@
       <!-- ── RIGHT: Device ────────────────────────────────────── -->
       <section class="studio-pane w-1/2 flex flex-col min-h-0">
         <!-- Tab bar -->
-        <div
-          class="flex border-b border-gray-200 dark:border-gray-800 shrink-0"
-        >
+        <div class="studio-panel-bar flex border-b shrink-0">
           <button
             @click="activeDeviceTab = 'tracks'"
             class="px-4 py-3 text-xs font-medium border-b-2 transition-colors hover:cursor-pointer"
             :class="activeDeviceTab === 'tracks'
-          ? 'border-violet-600 text-violet-600 dark:text-violet-400'
-          : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'"
+          ? 'border-[var(--studio-cyan)] text-[var(--studio-cyan)]'
+          : 'border-transparent studio-row-muted hover:text-[#d5d9da]'"
           >
             <span
               x-text="isDeviceSearchActive ? 'Search results' : (selectedMount && viewMode === 'folder' ? 'Folder view' : 'Tracks view')"
@@ -572,13 +570,13 @@
                 type="search"
                 placeholder="Search library"
                 aria-label="Search device library"
-                class="w-32 sm:w-44 px-2 py-1 rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs focus:outline-none"
+                class="studio-input w-32 sm:w-44 px-2 py-1 rounded-md border text-xs focus:outline-none"
               />
               <select
                 x-model="deviceFormat"
                 @change="searchDeviceLibrary()"
                 aria-label="Filter by format"
-                class="w-16 sm:w-20 px-1.5 py-0 rounded-md border-gray-600 dark:border-gray-700 bg-white dark:bg-gray-800 text-xs focus:outline-none"
+                class="studio-input w-16 sm:w-20 px-1.5 py-0 rounded-md border text-xs focus:outline-none"
               >
                 <option value="all">All</option>
                 <option value="mp3">MP3</option>
@@ -591,24 +589,24 @@
             <!-- View mode toggle (mount only) -->
             <template x-if="selectedMount">
               <div
-                class="flex items-center gap-1 mr-1 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden text-xs"
+                class="studio-control-group flex items-center gap-1 mr-1 border rounded-lg overflow-hidden text-xs"
               >
                 <button
                   @click="switchViewMode('folder')"
-                  class="hover:cursor-pointer px-2 py-1 transition-colors"
+                  class="studio-toggle-button hover:cursor-pointer px-2 py-1 transition-colors"
                   :class="viewMode === 'folder'
-                ? 'bg-violet-600 text-white'
-                : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'"
+                ? 'studio-toggle-button-active'
+                : ''"
                   title="Folder view"
                 >
                   📁
                 </button>
                 <button
                   @click="switchViewMode('flat')"
-                  class="hover:cursor-pointer px-2 py-1 transition-colors"
+                  class="studio-toggle-button hover:cursor-pointer px-2 py-1 transition-colors"
                   :class="viewMode === 'flat'
-                ? 'bg-violet-600 text-white'
-                : 'text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800'"
+                ? 'studio-toggle-button-active'
+                : ''"
                   title="List view"
                 >
                   ☰
@@ -619,13 +617,13 @@
             <button
               x-show="selectedDevice.size > 0"
               @click="deleteSelectedDeviceTracks()"
-              class="px-2.5 py-1 text-xs rounded-md text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+              class="studio-toolbar-button-danger px-2.5 py-1 text-xs rounded-md transition-colors"
             >
               Delete
             </button>
             <button
               @click="selectedMount && viewMode === 'folder' ? loadFolderContents(selectedMount.mount_path, folderPath) : (selectedMount ? loadMountTracks(selectedMount.mount_path) : loadDeviceTracks())"
-              class="hover:cursor-pointer w-7 h-7 rounded flex items-center justify-center text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+              class="studio-icon-button hover:cursor-pointer w-7 h-7 rounded flex items-center justify-center transition-colors"
               title="Refresh"
               aria-label="Refresh"
             >
@@ -652,12 +650,12 @@
         <!-- Tracks tab -->
         <div
           x-show="activeDeviceTab === 'tracks'"
-          class="flex-1 overflow-y-auto"
+          class="studio-scroll-zone flex-1 overflow-y-auto"
         >
           <!-- Not connected — show detected mount devices -->
           <div
             x-show="!device && !selectedMount && mountDevices.length === 0 && !isScanningMounts"
-            class="flex flex-col items-center justify-center h-full gap-2 text-gray-400 dark:text-gray-600"
+              class="studio-row-muted flex flex-col items-center justify-center h-full gap-2"
           >
             <svg
               class="w-10 h-10"
@@ -681,17 +679,17 @@
             class="p-3 space-y-2"
           >
             <p
-              class="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2"
+              class="studio-row-faint text-xs font-semibold uppercase tracking-widest mb-2"
             >
               Detected devices (USB storage)
             </p>
             <template x-for="md in mountDevices" :key="md.mount_path">
               <div
                 @click="selectMountDevice(md.mount_path)"
-                class="flex items-center gap-3 px-3 py-3 rounded-xl cursor-pointer border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-900/40 transition-colors"
+                class="studio-device-card flex items-center gap-3 px-3 py-3 rounded-xl cursor-pointer border transition-colors"
               >
                 <div
-                  class="w-8 h-8 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center text-violet-500 shrink-0"
+                  class="studio-device-icon w-8 h-8 rounded-full flex items-center justify-center shrink-0"
                 >
                   <svg
                     class="w-4 h-4"
@@ -717,13 +715,13 @@
                 <div class="flex-1 min-w-0">
                   <p class="font-medium text-sm truncate" x-text="md.name"></p>
                   <p
-                    class="text-xs text-gray-400"
+                    class="studio-row-muted text-xs"
                     x-text="`${md.track_count} audio files`"
                   ></p>
-                  <p class="text-xs text-gray-400" x-text="md.mount_path"></p>
+                  <p class="studio-row-muted text-xs" x-text="md.mount_path"></p>
                 </div>
                 <svg
-                  class="w-4 h-4 text-gray-400 shrink-0"
+                  class="studio-row-muted w-4 h-4 shrink-0"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -742,7 +740,7 @@
           <!-- Scanning mounts spinner -->
           <div
             x-show="isScanningMounts"
-            class="flex items-center justify-center h-full text-gray-400"
+              class="studio-row-muted flex items-center justify-center h-full"
           >
             <svg
               class="w-5 h-5 animate-spin"
@@ -760,7 +758,7 @@
           <!-- Loading -->
           <div
             x-show="(device || selectedMount) && isLoadingDevice"
-            class="flex items-center justify-center h-full text-gray-400"
+              class="studio-row-muted flex items-center justify-center h-full"
           >
             <svg
               class="w-5 h-5 animate-spin"
@@ -782,14 +780,14 @@
           >
             <!-- Breadcrumb -->
             <div
-              class="flex items-center gap-1 px-3 py-3.5 border-b border-gray-200 dark:border-gray-800 text-xs shrink-0 min-w-0"
+              class="studio-panel-subbar flex items-center gap-1 px-3 py-3.5 border-b text-xs shrink-0 min-w-0"
             >
               <div
                 class="flex flex-1 items-center gap-1 min-w-0 overflow-x-auto whitespace-nowrap"
               >
                 <button
                   @click="navigateFolder('')"
-                  class="hover:cursor-pointer flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors font-medium shrink-0"
+                  class="studio-icon-button hover:cursor-pointer flex items-center gap-1 px-1.5 py-0.5 rounded transition-colors font-medium shrink-0"
                   :title="selectedMount?.name || 'Enhet'"
                   aria-label="Go to device root folder"
                 >
@@ -814,7 +812,7 @@
                 >
                   <span class="flex items-center gap-1 shrink-0">
                     <svg
-                      class="w-3 h-3 text-gray-300 dark:text-gray-600"
+                      class="studio-row-faint w-3 h-3"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
@@ -827,10 +825,10 @@
                     </svg>
                     <button
                       @click="navigateFolder(folderPath.split('/').slice(0, id + 1).join('/'))"
-                      class="px-1.5 py-0.5 rounded hover:cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors max-w-32 truncate"
+                      class="px-1.5 py-0.5 rounded hover:cursor-pointer transition-colors max-w-32 truncate"
                       :class="id === folderPath.split('/').filter(Boolean).length - 1
-                    ? 'text-violet-600 dark:text-violet-400 font-medium'
-                    : 'text-gray-600 dark:text-gray-400'"
+                    ? 'studio-icon-button font-medium'
+                    : 'studio-row-muted hover:bg-[var(--studio-surface-hover)]'"
                       :title="part"
                       x-text="part"
                     ></button>
@@ -841,7 +839,7 @@
               <button
                 @click="navigateFolderUp()"
                 x-show="folderContents.parent_rel !== null"
-                class="flex items-center gap-1 px-2 py-0.5 rounded text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                class="studio-icon-button flex items-center gap-1 px-2 py-0.5 rounded transition-colors"
               >
                 <svg
                   class="w-3.5 h-3.5"
@@ -863,22 +861,22 @@
             <!-- Storage bar -->
             <template x-if="selectedMountDisk">
               <div
-                class="px-3 py-2 border-b border-gray-200 dark:border-gray-800 shrink-0"
+                class="studio-panel-subbar px-3 py-2 border-b shrink-0"
               >
                 <div class="flex items-center gap-2">
                   <div
-                    class="flex-1 h-2 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden"
+                    class="studio-progress-track flex-1 h-2 rounded-full overflow-hidden"
                   >
                     <div
                       class="h-full rounded-full transition-all duration-500"
                       :class="(selectedMountDisk.used_bytes / selectedMountDisk.total_bytes) > 0.9
-                    ? 'bg-red-500' : (selectedMountDisk.used_bytes / selectedMountDisk.total_bytes) > 0.7
-                    ? 'bg-amber-500' : 'bg-violet-500'"
+                    ? 'studio-meter-danger' : (selectedMountDisk.used_bytes / selectedMountDisk.total_bytes) > 0.7
+                    ? 'studio-meter-warn' : 'studio-meter-good'"
                       :style="`width:${(selectedMountDisk.used_bytes / selectedMountDisk.total_bytes * 100).toFixed(1)}%`"
                     ></div>
                   </div>
                   <span
-                    class="text-xs text-gray-500 shrink-0 whitespace-nowrap"
+                    class="studio-row-muted text-xs shrink-0 whitespace-nowrap"
                     x-text="`${fmtBytes(selectedMountDisk.used_bytes)} / ${fmtBytes(selectedMountDisk.total_bytes)}`"
                   >
                   </span>
@@ -889,12 +887,12 @@
             <!-- Select-all bar -->
             <div
               x-show="folderContents.files.length > 0 || folderContents.directories.length > 0"
-              class="flex items-center gap-2 px-3 py-1.5 border-b border-gray-200 dark:border-gray-800 shrink-0"
+              class="studio-panel-subbar flex items-center gap-2 px-3 py-1.5 border-b shrink-0"
             >
               <button
                 @click="selectAllFolderFiles()"
                 x-show="folderContents.files.length > 0"
-                class="text-xs font-medium text-violet-600 dark:text-violet-400 hover:text-violet-700 transition-colors hover:cursor-pointer"
+                class="studio-icon-button text-xs font-medium transition-colors hover:cursor-pointer"
               >
                 <span
                   x-text="folderContents.files.every(f => selectedDevice.has(f.id)) ? 'Deselect all' : 'Select all'"
@@ -902,14 +900,14 @@
               </button>
               <span class="flex-1"></span>
               <span
-                class="text-xs text-gray-400"
+                class="studio-row-muted text-xs"
                 x-show="selectedDevice.size > 0"
                 x-text="`${selectedDevice.size} selected`"
               ></span>
             </div>
 
             <!-- Folder contents -->
-            <div class="flex-1 overflow-y-auto">
+            <div class="studio-scroll-zone flex-1 overflow-y-auto">
               <!-- Directories -->
               <template
                 x-for="dir in folderContents.directories"
@@ -922,10 +920,10 @@
                   role="button"
                   tabindex="0"
                   :aria-label="`Open folder ${dir.name}`"
-                  class="flex items-center gap-2 px-3 py-2.5 cursor-pointer border-b border-gray-100 dark:border-gray-800/60 hover:bg-gray-50 dark:hover:bg-gray-900/40 transition-colors group"
+                  class="studio-row flex items-center gap-2 px-3 py-2.5 cursor-pointer border-b group"
                 >
                   <div
-                    class="w-8 h-8 rounded bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center text-amber-500 shrink-0"
+                    class="studio-folder-icon w-8 h-8 rounded flex items-center justify-center shrink-0"
                   >
                     <svg
                       class="w-4 h-4"
@@ -945,13 +943,13 @@
                       x-text="dir.name"
                     ></p>
                     <p
-                      class="text-xs text-gray-400"
+                      class="studio-row-muted text-xs"
                       x-text="`${dir.file_count} audio files · ${fmtBytes(dir.audio_size_bytes)}`"
                     ></p>
                   </div>
                   <button
                     @click.stop="deleteFolder(dir.rel_path)"
-                    class="hover:cursor-pointer w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 shrink-0"
+                    class="studio-icon-button studio-icon-button-danger hover:cursor-pointer w-6 h-6 rounded flex items-center justify-center transition-colors opacity-0 group-hover:opacity-100 shrink-0"
                     title="Delete folder"
                     aria-label="Delete folder"
                   >
@@ -970,7 +968,7 @@
                     </svg>
                   </button>
                   <svg
-                    class="w-4 h-4 text-gray-400 shrink-0"
+                    class="studio-row-muted w-4 h-4 shrink-0"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
@@ -990,13 +988,13 @@
                 <div
                   @click="toggleDeviceTrack(track.id)"
                   @pointerenter="moveDevicePointer(track)"
-                  class="flex items-center gap-2 px-3 py-2 cursor-pointer border-b border-gray-100 dark:border-gray-800/60 hover:bg-gray-50 dark:hover:bg-gray-900/40 transition-colors"
+                  class="studio-row flex items-center gap-2 px-3 py-2 cursor-pointer border-b"
                   :class="draggedDeviceId === track.id && pointerDraggingDevice
-                   ? 'bg-amber-100 dark:bg-amber-900/40 ring-1 ring-amber-300 dark:ring-amber-700'
-                   : selectedDevice.has(track.id) ? 'bg-violet-50 dark:bg-violet-900/20' : ''"
+                   ? 'studio-row-dragging'
+                   : selectedDevice.has(track.id) ? 'studio-row-selected' : ''"
                 >
                   <span
-                    class="p-2 text-gray-300 dark:text-gray-600 text-xs shrink-0 cursor-grab"
+                    class="studio-drag-handle p-2 text-xs shrink-0 cursor-grab"
                     @pointerdown.stop.prevent="startDevicePointerDrag(track)"
                     title="Drag to reorder"
                     >⋮</span
@@ -1004,8 +1002,8 @@
                   <div
                     class="w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors"
                     :class="selectedDevice.has(track.id)
-                  ? 'bg-violet-600 border-violet-600 text-white'
-                  : 'border-gray-300 dark:border-gray-600'"
+                  ? 'studio-checkbox-selected'
+                  : 'studio-checkbox'"
                   >
                     <svg
                       x-show="selectedDevice.has(track.id)"
@@ -1024,7 +1022,7 @@
                   </div>
 
                   <div
-                    class="w-8 h-8 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 text-xs shrink-0"
+                    class="studio-cover studio-cover-placeholder w-8 h-8 rounded flex items-center justify-center text-xs shrink-0"
                   >
                     <template x-if="track.cover_art">
                       <img
@@ -1043,7 +1041,7 @@
                       x-text="track.title || track.path.split('/').pop()"
                     ></p>
                     <p
-                      class="truncate text-xs text-gray-400 dark:text-gray-500"
+                      class="studio-row-muted truncate text-xs"
                       x-text="[track.artist, track.album].filter(Boolean).join(' · ') || ''"
                     ></p>
                   </div>
@@ -1053,7 +1051,7 @@
                     <button
                       x-show="track.path"
                       @click.stop="togglePreview(track.path)"
-                      class="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-violet-500 transition-colors"
+                      class="studio-icon-button w-6 h-6 rounded flex items-center justify-center transition-colors"
                       :title="previewPath === track.path && isPlaying ? 'Stop' : 'Preview'"
                     >
                       <svg
@@ -1077,7 +1075,7 @@
                     <!-- Edit metadata -->
                     <button
                       @click.stop="openDeviceMetaEditor(track)"
-                      class="hover:cursor-pointer w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-violet-500 transition-colors"
+                      class="studio-icon-button hover:cursor-pointer w-6 h-6 rounded flex items-center justify-center transition-colors"
                       title="Edit metadata"
                     >
                       <svg
@@ -1096,11 +1094,11 @@
                       </svg>
                     </button>
                     <span
-                      class="text-xs text-gray-400"
+                      class="studio-row-muted text-xs"
                       x-text="fmtDuration(track.duration_ms)"
                     ></span>
                     <span
-                      class="text-[10px] font-mono uppercase px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500"
+                      class="studio-format-pill text-[10px] font-mono uppercase px-1 py-0.5 rounded"
                       x-text="track.filetype"
                     ></span>
                   </div>
@@ -1110,7 +1108,7 @@
               <!-- Empty folder -->
               <div
                 x-show="folderContents.directories.length === 0 && folderContents.files.length === 0"
-                class="flex flex-col items-center justify-center h-full gap-2 text-gray-400 dark:text-gray-600"
+                class="studio-row-muted flex flex-col items-center justify-center h-full gap-2"
               >
                 <p class="text-sm">Empty folder</p>
               </div>
@@ -1124,7 +1122,7 @@
             <!-- Empty device -->
             <div
               x-show="(device || (selectedMount && (viewMode === 'flat' || isDeviceSearchActive))) && !isLoadingDevice && !isLoadingSearchLibrary && filteredDeviceTracks.length === 0"
-              class="flex flex-col items-center mt-24 justify-center h-full gap-2 text-gray-400 dark:text-gray-600"
+              class="studio-row-muted flex flex-col items-center mt-24 justify-center h-full gap-2"
             >
               <p
                 class="text-sm"
@@ -1137,13 +1135,13 @@
               <div
                 @click="toggleDeviceTrack(track.id)"
                 @pointerenter="moveDevicePointer(track)"
-                class="flex items-center gap-2 px-3 py-2 cursor-pointer border-b border-gray-100 dark:border-gray-800/60 hover:bg-gray-50 dark:hover:bg-gray-900/40 transition-colors"
+                class="studio-row flex items-center gap-2 px-3 py-2 cursor-pointer border-b"
                 :class="draggedDeviceId === track.id && pointerDraggingDevice
-                  ? 'bg-amber-100 dark:bg-amber-900/40 ring-1 ring-amber-300 dark:ring-amber-700'
-                  : selectedDevice.has(track.id) ? 'bg-violet-50 dark:bg-violet-900/20' : ''"
+                  ? 'studio-row-dragging'
+                  : selectedDevice.has(track.id) ? 'studio-row-selected' : ''"
               >
                 <span
-                  class="p-3 text-gray-300 dark:text-gray-600 text-xs shrink-0 cursor-grab"
+                  class="studio-drag-handle p-3 text-xs shrink-0 cursor-grab"
                   @pointerdown.stop.prevent="startDevicePointerDrag(track)"
                   title="Drag to reorder"
                   >⋮</span
@@ -1151,8 +1149,8 @@
                 <div
                   class="w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors"
                   :class="selectedDevice.has(track.id)
-                ? 'bg-violet-600 border-violet-600 text-white'
-                : 'border-gray-300 dark:border-gray-600'"
+                ? 'studio-checkbox-selected'
+                : 'studio-checkbox'"
                 >
                   <svg
                     x-show="selectedDevice.has(track.id)"
@@ -1171,7 +1169,7 @@
                 </div>
 
                 <div
-                  class="w-8 h-8 rounded bg-gray-100 dark:bg-gray-800 flex items-center justify-center text-gray-400 text-xs shrink-0 overflow-hidden"
+                  class="studio-cover studio-cover-placeholder w-8 h-8 rounded flex items-center justify-center text-xs shrink-0 overflow-hidden"
                   x-init="observeCover($el, track)"
                 >
                   <template x-if="track.cover_art">
@@ -1193,12 +1191,12 @@
                     x-text="track.title || track.filename || track.path?.split('/').pop() || track.id"
                   ></p>
                   <p
-                    class="truncate text-xs text-gray-400 dark:text-gray-500"
+                    class="studio-row-muted truncate text-xs"
                     x-text="[track.artist, track.album].filter(Boolean).join(' · ')"
                   ></p>
                   <p
                     x-show="isDeviceSearchActive && track.path"
-                    class="truncate text-[10px] text-gray-400 dark:text-gray-600"
+                    class="studio-row-faint truncate text-[10px]"
                     x-text="selectedMount ? track.id : track.filename"
                   ></p>
                 </div>
@@ -1208,7 +1206,7 @@
                   <button
                     x-show="track.path"
                     @click.stop="togglePreview(track.path)"
-                    class="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-violet-500 transition-colors"
+                    class="studio-icon-button w-6 h-6 rounded flex items-center justify-center transition-colors"
                     :title="previewPath === track.path && isPlaying ? 'Stop' : 'Preview'"
                   >
                     <svg
@@ -1233,7 +1231,7 @@
                   <button
                     x-show="selectedMount && track.path"
                     @click.stop="selectedMount && openDeviceMetaEditor(track)"
-                    class="w-6 h-6 rounded flex items-center justify-center text-gray-400 hover:text-violet-500 transition-colors"
+                    class="studio-icon-button w-6 h-6 rounded flex items-center justify-center transition-colors"
                     title="Edit metadata"
                   >
                     <svg
@@ -1252,11 +1250,11 @@
                     </svg>
                   </button>
                   <span
-                    class="text-xs text-gray-400"
+                    class="studio-row-muted text-xs"
                     x-text="fmtDuration(track.duration_ms)"
                   ></span>
                   <span
-                    class="text-[10px] font-mono uppercase px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-gray-500"
+                    class="studio-format-pill text-[10px] font-mono uppercase px-1 py-0.5 rounded"
                     x-text="track.filetype"
                   ></span>
                 </div>
@@ -1272,13 +1270,13 @@
 ═══════════════════════════════════════════════════════════════ -->
     <div
       x-show="transferList.length > 0"
-      class="studio-activity border-t border-gray-200 dark:border-gray-800 shrink-0 bg-white dark:bg-gray-950 max-h-36 overflow-y-auto"
+      class="studio-activity border-t shrink-0 max-h-36 overflow-y-auto"
       role="status"
       aria-live="polite"
       x-ref="transferPanel"
     >
       <div
-        class="flex items-center gap-2 px-3 py-1 text-xs text-gray-500 border-b border-gray-100 dark:border-gray-800"
+        class="studio-activity-header studio-row-muted flex items-center gap-2 px-3 py-1 text-xs border-b"
       >
         <span
           x-text="`${transferList.filter(t => t.status === 'done').length} completed · ${transferList.filter(t => t.status === 'error').length} errors`"
@@ -1287,7 +1285,7 @@
         <button
           x-show="isTransferring"
           @click="cancelTransfer()"
-          class="text-amber-600 hover:text-amber-700"
+          class="studio-status-warning"
           aria-label="Cancel transfer"
         >
           Cancel
@@ -1295,13 +1293,13 @@
       </div>
       <template x-for="t in transferList" :key="t.id">
         <div
-          class="flex items-center gap-3 px-3 py-1.5 border-b border-gray-100 dark:border-gray-800/40 last:border-0"
+          class="studio-activity-row flex items-center gap-3 px-3 py-1.5 border-b last:border-0"
         >
           <span class="text-xs truncate flex-1" x-text="t.filename"></span>
           <template x-if="t.status === 'transferring'">
             <div class="flex items-center gap-2 w-40 shrink-0">
               <div
-                class="flex-1 h-1.5 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden"
+                  class="studio-progress-track flex-1 h-1.5 rounded-full overflow-hidden"
                 role="progressbar"
                 :aria-valuenow="t.percent"
                 aria-valuemin="0"
@@ -1309,26 +1307,26 @@
                 :aria-label="`Transfer ${t.filename}`"
               >
                 <div
-                  class="h-full rounded-full bg-violet-500 progress-animated transition-all duration-300"
+                  class="studio-meter-good h-full rounded-full progress-animated transition-all duration-300"
                   :style="`width:${t.percent}%`"
                 ></div>
               </div>
               <span
-                class="text-xs text-gray-400 w-8 text-right"
+                  class="studio-row-muted text-xs w-8 text-right"
                 x-text="`${t.percent}%`"
               ></span>
             </div>
           </template>
           <template x-if="t.status === 'done'">
-            <span class="text-xs text-emerald-500 shrink-0">✓ Done</span>
+            <span class="studio-status-success text-xs shrink-0">✓ Done</span>
           </template>
           <template x-if="t.status === 'error'">
             <div class="flex items-center gap-2 shrink-0">
-              <span class="text-xs text-red-500" :title="t.error">✕ Fel</span>
+              <span class="studio-status-error text-xs" :title="t.error">✕ Fel</span>
               <button
                 @click="retryTransfer(t.id)"
                 x-show="!t.sourceFile?.originalPath"
-                class="text-xs text-violet-600 hover:text-violet-700"
+                class="studio-link-button text-xs"
                 aria-label="Retry transfer"
               >
                 Retry
@@ -1342,10 +1340,10 @@
     <div
       x-show="transferNotice"
       x-cloak
-      class="fixed right-4 bottom-4 z-40 max-w-xl rounded-xl border border-emerald-200 dark:border-emerald-900/60 bg-white dark:bg-gray-900 px-4 py-3 shadow-lg text-sm text-emerald-700 dark:text-emerald-300"
+      class="studio-notice fixed right-4 bottom-4 z-40 max-w-xl rounded-xl border px-4 py-3 text-sm"
       :class="transferNotice?.includes('fel') || transferNotice?.includes('avbruten') || transferNotice?.includes('lost') || transferNotice?.includes('disconnected')
-        ? 'border-amber-200 dark:border-amber-900/60 text-amber-700 dark:text-amber-300'
-        : 'border-emerald-200 dark:border-emerald-900/60 text-emerald-700 dark:text-emerald-300'"
+        ? 'studio-notice-warning'
+        : 'studio-notice-success'"
       role="alert"
     >
       <div class="flex items-start gap-3">
@@ -1361,11 +1359,56 @@
       </div>
     </div>
 
+    <!-- Modal: Delete confirmation -->
+    <div
+      x-show="deleteConfirmModal"
+      x-cloak
+      class="studio-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4"
+      @keydown.escape.window="closeDeleteConfirm()"
+    >
+      <div
+        @click.stop
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-confirm-title"
+        class="studio-modal-card rounded-2xl w-full max-w-md p-6 border"
+      >
+        <h2
+          id="delete-confirm-title"
+          class="font-semibold text-base mb-1"
+          x-text="deleteConfirmTitle"
+        ></h2>
+        <p
+          class="studio-modal-copy text-sm leading-5 mb-5"
+          x-text="deleteConfirmMessage"
+        ></p>
+        <div class="studio-callout-warning rounded-xl border px-3 py-2 text-xs">
+          <span x-text="deleteConfirmWarning"></span>
+        </div>
+        <div class="flex gap-3 mt-5 justify-end">
+          <button
+            @click="closeDeleteConfirm()"
+            :disabled="deleteConfirmBusy"
+            class="studio-button-secondary px-4 py-1.5 text-sm rounded-lg border disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            @click="runDeleteConfirm()"
+            :disabled="deleteConfirmBusy"
+            class="studio-danger-button px-4 py-1.5 text-sm rounded-lg font-medium disabled:opacity-50"
+          >
+            <span x-text="deleteConfirmBusy ? 'Working…' : deleteConfirmButton"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Modal: Transfer confirmation -->
     <div
       x-show="transferConfirmModal"
       x-cloak
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      class="studio-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4"
       @keydown.escape.window="transferConfirmModal = false"
     >
       <div
@@ -1373,51 +1416,51 @@
         role="dialog"
         aria-modal="true"
         aria-labelledby="transfer-confirm-title"
-        class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-6 border border-gray-200 dark:border-gray-700"
+        class="studio-modal-card rounded-2xl w-full max-w-md p-6 border"
       >
         <h2 id="transfer-confirm-title" class="font-semibold text-base mb-1">
           Confirm transfer
         </h2>
-        <p class="text-xs text-gray-500 mb-5">
+        <p class="studio-modal-copy text-xs mb-5">
           Review what will be copied before starting.
         </p>
 
         <div class="space-y-2 text-sm">
           <div class="flex justify-between gap-4">
-            <span class="text-gray-500">Files</span>
+            <span class="studio-row-muted">Files</span>
             <span class="font-medium" x-text="selectedLocal.size"></span>
           </div>
           <div class="flex justify-between gap-4">
-            <span class="text-gray-500">Total size</span>
+            <span class="studio-row-muted">Total size</span>
             <span class="font-medium" x-text="fmtBytes(selectedLocalBytes)"></span>
           </div>
           <div class="flex justify-between gap-4">
-            <span class="text-gray-500">Destination</span>
+            <span class="studio-row-muted">Destination</span>
             <span class="font-medium text-right truncate" x-text="transferSummaryDestination"></span>
           </div>
           <div x-show="selectedMount" class="flex justify-between gap-4">
-            <span class="text-gray-500">Genre folders</span>
+            <span class="studio-row-muted">Genre folders</span>
             <span class="font-medium" x-text="createGenreFolders ? 'On' : 'Off'"></span>
           </div>
           <div
             x-show="selectedMount && transferSummaryRemainingBytes !== null"
             class="flex justify-between gap-4"
           >
-            <span class="text-gray-500">After transfer</span>
+            <span class="studio-row-muted">After transfer</span>
             <span
               class="font-medium"
-              :class="transferSummaryRemainingBytes < 0 ? 'text-red-400' : 'text-green-400'"
+              :class="transferSummaryRemainingBytes < 0 ? 'studio-status-error' : 'studio-status-success'"
               x-text="`${fmtBytes(Math.abs(transferSummaryRemainingBytes))} ${transferSummaryRemainingBytes < 0 ? 'over capacity' : 'free'}`"
             ></span>
           </div>
         </div>
 
-        <div class="mt-4 rounded-xl bg-cyan-950/20 border border-cyan-900/50 px-3 py-2 text-xs text-cyan-100">
+        <div class="studio-callout-info mt-4 rounded-xl border px-3 py-2 text-xs">
           Files are copied as-is. No conversion or quality changes.
         </div>
         <div
           x-show="transferConfirmAction === 'sync'"
-          class="mt-2 rounded-xl bg-amber-950/20 border border-amber-900/60 px-3 py-2 text-xs text-amber-200"
+          class="studio-callout-warning mt-2 rounded-xl border px-3 py-2 text-xs"
         >
           Sync replaces matching files on the device before copying selected files.
         </div>
@@ -1425,13 +1468,13 @@
         <div class="flex gap-3 mt-5 justify-end">
           <button
             @click="transferConfirmModal = false"
-            class="px-4 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            class="studio-button-secondary px-4 py-1.5 text-sm rounded-lg border"
           >
             Cancel
           </button>
           <button
             @click="startConfirmedTransfer()"
-            class="px-4 py-1.5 text-sm rounded-lg bg-violet-600 hover:bg-violet-700 text-white font-medium transition-colors"
+            class="studio-primary-button px-4 py-1.5 text-sm rounded-lg font-medium"
           >
             Start transfer
           </button>
@@ -1443,7 +1486,7 @@
     <div
       x-show="profileModal"
       x-cloak
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      class="studio-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4"
       @keydown.escape.window="profileModal = false"
     >
       <div
@@ -1451,27 +1494,27 @@
         role="dialog"
         aria-modal="true"
         aria-labelledby="profile-title"
-        class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-6 border border-gray-200 dark:border-gray-700"
+        class="studio-modal-card rounded-2xl w-full max-w-md p-6 border"
       >
         <h2 id="profile-title" class="font-semibold text-base">
           Create saved sync
         </h2>
-        <p class="text-xs text-gray-500 mt-1 mb-5">
+        <p class="studio-modal-copy text-xs mt-1 mb-5">
           Remember a music folder and its selection for future device updates.
         </p>
-        <label class="block text-xs font-medium text-gray-500 mb-1"
+        <label class="studio-form-label block text-xs font-medium mb-1"
           >Profile name</label
         >
         <input
           x-model="profileName"
           type="text"
           placeholder="My Echo library"
-          class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm mb-4 focus:outline-none"
+          class="studio-input w-full px-3 py-2 rounded-lg border text-sm mb-4 focus:outline-none"
         />
-        <label class="block text-xs font-medium text-gray-500 mb-1"
+        <label class="studio-form-label block text-xs font-medium mb-1"
           >Music folder</label
         >
-        <p class="text-xs text-gray-500 mb-2">
+        <p class="studio-modal-copy text-xs mb-2">
           Choose the folder containing your music. Individual audio files cannot
           be selected here.
         </p>
@@ -1480,11 +1523,11 @@
             x-model="profileFolder"
             readonly
             placeholder="Choose a folder"
-            class="flex-1 min-w-0 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:outline-none"
+            class="studio-input flex-1 min-w-0 px-3 py-2 rounded-lg border text-sm focus:outline-none"
           />
           <button
             @click="chooseSyncProfileFolder()"
-            class="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-xs font-medium transition-colors"
+            class="studio-button-secondary px-3 py-2 rounded-lg border text-xs font-medium"
           >
             Browse
           </button>
@@ -1492,14 +1535,14 @@
         <div class="flex gap-3 mt-6 justify-end">
           <button
             @click="profileModal = false"
-            class="px-4 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            class="studio-button-secondary px-4 py-1.5 text-sm rounded-lg border"
           >
             Cancel
           </button>
           <button
             @click="createSyncProfile()"
             :disabled="!profileFolder"
-            class="px-4 py-1.5 text-sm rounded-lg bg-violet-600 hover:bg-violet-700 text-white font-medium transition-colors disabled:opacity-40"
+            class="studio-primary-button px-4 py-1.5 text-sm rounded-lg font-medium disabled:opacity-40"
           >
             Create and scan
           </button>
@@ -1513,19 +1556,19 @@
     <div
       x-show="metaModal"
       x-cloak
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      class="studio-modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4"
       @keydown.escape.window="metaModal = false"
     >
       <div
         @click.stop
-        class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-6 border border-gray-200 dark:border-gray-700"
+        class="studio-modal-card rounded-2xl w-full max-w-md p-6 border"
       >
         <h2 class="font-semibold text-base mb-4">Edit metadata</h2>
 
         <!-- Cover art -->
         <div class="flex justify-center mb-4">
           <div
-            class="w-24 h-24 rounded-xl bg-gray-100 dark:bg-gray-800 overflow-hidden"
+            class="studio-cover w-24 h-24 rounded-xl overflow-hidden"
           >
             <template x-if="metaForm.cover_art">
               <img
@@ -1535,7 +1578,7 @@
             </template>
             <template x-if="!metaForm.cover_art">
               <div
-                class="w-full h-full flex items-center justify-center text-gray-400 text-3xl"
+                class="studio-cover-placeholder w-full h-full flex items-center justify-center text-3xl"
               >
                 ♪
               </div>
@@ -1545,47 +1588,47 @@
 
         <div class="grid grid-cols-2 gap-3">
           <div class="col-span-2">
-            <label class="block text-xs font-medium text-gray-500 mb-1"
+            <label class="studio-form-label block text-xs font-medium mb-1"
               >Title</label
             >
             <input
               x-model="metaForm.title"
               type="text"
-              class="w-full px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+              class="studio-input w-full px-3 py-1.5 rounded-lg border text-sm focus:outline-none"
             />
           </div>
           <div>
-            <label class="block text-xs font-medium text-gray-500 mb-1"
+            <label class="studio-form-label block text-xs font-medium mb-1"
               >Artist</label
             >
             <input
               x-model="metaForm.artist"
               type="text"
-              class="w-full px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+              class="studio-input w-full px-3 py-1.5 rounded-lg border text-sm focus:outline-none"
             />
           </div>
           <div>
-            <label class="block text-xs font-medium text-gray-500 mb-1"
+            <label class="studio-form-label block text-xs font-medium mb-1"
               >Album</label
             >
             <input
               x-model="metaForm.album"
               type="text"
-              class="w-full px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+              class="studio-input w-full px-3 py-1.5 rounded-lg border text-sm focus:outline-none"
             />
           </div>
           <div>
-            <label class="block text-xs font-medium text-gray-500 mb-1"
+            <label class="studio-form-label block text-xs font-medium mb-1"
               >Genre</label
             >
             <input
               x-model="metaForm.genre"
               type="text"
-              class="w-full px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+              class="studio-input w-full px-3 py-1.5 rounded-lg border text-sm focus:outline-none"
             />
           </div>
           <div>
-            <label class="block text-xs font-medium text-gray-500 mb-1"
+            <label class="studio-form-label block text-xs font-medium mb-1"
               >Year</label
             >
             <input
@@ -1593,18 +1636,18 @@
               type="number"
               min="1900"
               max="2099"
-              class="w-full px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+              class="studio-input w-full px-3 py-1.5 rounded-lg border text-sm focus:outline-none"
             />
           </div>
           <div>
-            <label class="block text-xs font-medium text-gray-500 mb-1"
+            <label class="studio-form-label block text-xs font-medium mb-1"
               >Track no.</label
             >
             <input
               x-model.number="metaForm.track_number"
               type="number"
               min="1"
-              class="w-full px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+              class="studio-input w-full px-3 py-1.5 rounded-lg border text-sm focus:outline-none"
             />
           </div>
         </div>
@@ -1612,14 +1655,14 @@
         <div class="flex gap-3 mt-5 justify-end">
           <button
             @click="metaModal = false"
-            class="px-4 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+            class="studio-button-secondary px-4 py-1.5 text-sm rounded-lg border"
           >
             Cancel
           </button>
           <button
             @click="saveMeta()"
             :disabled="metaSaving"
-            class="px-4 py-1.5 text-sm rounded-lg bg-violet-600 hover:bg-violet-700 text-white font-medium transition-colors disabled:opacity-50"
+            class="studio-primary-button px-4 py-1.5 text-sm rounded-lg font-medium disabled:opacity-50"
           >
             <span x-text="metaSaving ? 'Saving…' : 'Save'"></span>
           </button>
