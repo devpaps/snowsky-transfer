@@ -111,6 +111,7 @@ Alpine.data("app", () => ({
   // ── Local files queue
   localFiles: [], // Array<{ path, name, ext, size, meta | null, metadataError | null }>
   selectedLocal: new Set(),
+  fileImportNotice: null,
   draggedLocalPath: null,
   dragOverLocalPath: null,
   pointerDraggingLocal: false,
@@ -872,8 +873,19 @@ Alpine.data("app", () => ({
   async addFilePaths(paths) {
     // Resolve each path: single audio file or entire directory tree
     const resolved = []; // { path, subPath }
+    const skipped = [];
+    let duplicateCount = 0;
+    let emptyCount = 0;
+    let addedCount = 0;
+
     for (const p of paths) {
       const files = await invoke("expand_audio_path", { path: p });
+      if (files.length === 0) {
+        const ext = extOf(p);
+        if (AUDIO_EXTS.has(ext)) emptyCount++;
+        else skipped.push(p.split("/").pop() || p);
+        continue;
+      }
       const isDir = files.length !== 1 || files[0] !== p;
       for (const f of files) {
         if (!resolved.some((r) => r.path === f)) {
@@ -889,9 +901,15 @@ Alpine.data("app", () => ({
 
     for (const { path, subPath } of resolved) {
       const ext = extOf(path);
-      if (!AUDIO_EXTS.has(ext)) continue;
+      if (!AUDIO_EXTS.has(ext)) {
+        skipped.push(path.split("/").pop() || path);
+        continue;
+      }
       const name = path.split("/").pop();
-      if (this.localFiles.some((f) => f.path === path)) continue;
+      if (this.localFiles.some((f) => f.path === path)) {
+        duplicateCount++;
+        continue;
+      }
 
       this.localFiles.push({
         path,
@@ -903,6 +921,7 @@ Alpine.data("app", () => ({
         size: null,
         loading: true,
       });
+      addedCount++;
 
       invoke("get_local_metadata", { path })
         .then((meta) => {
@@ -927,6 +946,28 @@ Alpine.data("app", () => ({
         })
         .catch(() => {});
     }
+
+    const parts = [];
+    if (addedCount)
+      parts.push(`${addedCount} ${addedCount === 1 ? "file" : "files"} added`);
+    if (duplicateCount)
+      parts.push(`${duplicateCount} duplicate ${duplicateCount === 1 ? "file" : "files"} ignored`);
+    if (skipped.length)
+      parts.push(`${skipped.length} unsupported ${skipped.length === 1 ? "file" : "files"} skipped`);
+    if (emptyCount)
+      parts.push(`${emptyCount} ${emptyCount === 1 ? "item" : "items"} had no supported audio`);
+
+    if (parts.length) {
+      this.fileImportNotice = {
+        message: parts.join(" · "),
+        skipped: skipped.slice(0, 5),
+        extraSkipped: Math.max(0, skipped.length - 5),
+      };
+    }
+  },
+
+  closeFileImportNotice() {
+    this.fileImportNotice = null;
   },
 
   removeLocalFile(path) {

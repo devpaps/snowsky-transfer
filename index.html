@@ -217,6 +217,31 @@
           </button>
         </div>
 
+        <div
+          x-show="fileImportNotice"
+          x-cloak
+          class="mx-3 mt-3 rounded-xl border border-cyan-900/50 bg-cyan-950/20 px-3 py-2 text-xs text-cyan-100 shadow-sm"
+        >
+          <div class="flex items-start gap-3">
+            <div class="min-w-0 flex-1">
+              <p class="font-medium" x-text="fileImportNotice?.message"></p>
+              <p
+                x-show="fileImportNotice?.skipped?.length"
+                class="mt-1 truncate text-cyan-200/70"
+                x-text="`Skipped: ${fileImportNotice.skipped.join(', ')}${fileImportNotice.extraSkipped ? ` and ${fileImportNotice.extraSkipped} more` : ''}`"
+              ></p>
+            </div>
+            <button
+              @click="closeFileImportNotice()"
+              class="shrink-0 text-cyan-200/60 hover:text-cyan-100 transition-colors"
+              aria-label="Dismiss import notice"
+              title="Dismiss"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
         <!-- Drop zone / file list -->
         <div
           class="flex-1 overflow-y-auto transition-all"
