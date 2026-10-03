@@ -8,7 +8,7 @@ use crate::error::AppError;
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ConvertRequest {
     pub input_path:  String,
-    pub output_fmt:  String,   // "mp3" | "flac" | "ogg" | "m4a" | "wav"
+    pub output_fmt:  String,   // "mp3" | "flac" | "ogg" | "m4a" | "aac" | "wav"
     pub bitrate_kbps: Option<u32>, // for lossy formats; None = ffmpeg default
 }
 

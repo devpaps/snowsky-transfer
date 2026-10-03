@@ -262,7 +262,7 @@
               />
             </svg>
             <p class="text-sm font-medium">Drag and drop audio files here</p>
-            <p class="text-xs">MP3 · FLAC · OGG · WAV · M4A · AAC</p>
+            <p class="text-xs">Supported for transfer: MP3 · FLAC · OGG · WAV · M4A · AAC</p>
           </div>
 
           <!-- File rows -->
@@ -339,6 +339,13 @@
                     class="truncate text-[10px] text-gray-400 dark:text-gray-600"
                     x-text="file.subPath.replace('/' + file.name, '')"
                   ></p>
+                  <p
+                    x-show="file.metadataError"
+                    class="truncate text-[10px] text-amber-500 dark:text-amber-400"
+                    :title="file.metadataError"
+                  >
+                    Metadata unavailable for this file
+                  </p>
                 </div>
 
                 <!-- Duration + format -->
@@ -1533,7 +1540,7 @@
       >
         <h2 class="font-semibold text-base mb-1">Format conversion</h2>
         <p class="text-xs text-gray-500 mb-4">
-          Your files are not MP3. Would you like to convert them with ffmpeg?
+          Some files are not MP3 or FLAC. Would you like to convert them with ffmpeg?
         </p>
 
         <div class="space-y-3 mb-4">

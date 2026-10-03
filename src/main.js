@@ -109,7 +109,7 @@ Alpine.data("app", () => ({
   selectedMountDisk: null, // DiskUsage | null
 
   // ── Local files queue
-  localFiles: [], // Array<{ path, name, ext, size, meta | null }>
+  localFiles: [], // Array<{ path, name, ext, size, meta | null, metadataError | null }>
   selectedLocal: new Set(),
   draggedLocalPath: null,
   dragOverLocalPath: null,
@@ -780,6 +780,7 @@ Alpine.data("app", () => ({
           ext,
           subPath,
           meta: null,
+          metadataError: null,
           size: sourceSize,
           loading: true,
           syncStatus: isExcluded ? "excluded" : "new",
@@ -794,8 +795,10 @@ Alpine.data("app", () => ({
         files.map(async (file) => {
           try {
             file.meta = await invoke("get_local_metadata", { path: file.path });
-          } catch (_) {
+            file.metadataError = null;
+          } catch (e) {
             file.meta = null;
+            file.metadataError = e?.toString?.() || "Could not read metadata";
           }
           file.syncOrder = trackNumberOf(file);
           file.loading = false;
@@ -906,6 +909,7 @@ Alpine.data("app", () => ({
         ext,
         subPath,
         meta: null,
+        metadataError: null,
         size: null,
         loading: true,
       });
@@ -915,11 +919,15 @@ Alpine.data("app", () => ({
           const file = this.localFiles.find((f) => f.path === path);
           if (!file) return;
           file.meta = meta;
+          file.metadataError = null;
           file.loading = false;
         })
-        .catch(() => {
+        .catch((e) => {
           const file = this.localFiles.find((f) => f.path === path);
-          if (file) file.loading = false;
+          if (file) {
+            file.metadataError = e?.toString?.() || "Could not read metadata";
+            file.loading = false;
+          }
         });
 
       invoke("get_local_file_size", { path })
@@ -1229,7 +1237,7 @@ Alpine.data("app", () => ({
   async confirmConvert(convert) {
     this.convertModal = false;
     const requests = this.pendingFiles.map((f) => {
-      if (convert && f.ext !== "mp3") {
+      if (convert && f.ext !== "mp3" && f.ext !== "flac") {
         return {
           file: f,
           convertTo: this.convertFmt,
@@ -1544,14 +1552,20 @@ Alpine.data("app", () => ({
 
   // ─── Preview ─────────────────────────────────────────────────────────────
   async togglePreview(path) {
-    if (this.previewPath === path && this.isPlaying) {
-      await invoke("stop_preview");
-      this.isPlaying = false;
+    try {
+      if (this.previewPath === path && this.isPlaying) {
+        await invoke("stop_preview");
+        this.isPlaying = false;
+        this.previewPath = null;
+      } else {
+        await invoke("preview_track", { path });
+        this.previewPath = path;
+        this.isPlaying = true;
+      }
+    } catch (e) {
       this.previewPath = null;
-    } else {
-      await invoke("preview_track", { path });
-      this.previewPath = path;
-      this.isPlaying = true;
+      this.isPlaying = false;
+      window.alert(`Could not preview this file: ${e}`);
     }
   },
 
@@ -1622,6 +1636,7 @@ Alpine.data("app", () => ({
       this.metaModal = false;
     } catch (e) {
       console.error("update_local_metadata error:", e);
+      window.alert(`Could not save metadata: ${e}`);
     } finally {
       this.metaSaving = false;
     }
