@@ -102,6 +102,8 @@ button.bg-violet-600:hover { background: var(--studio-cyan) !important; }
 .studio-activity .bg-violet-500 { background: var(--studio-cyan) !important; }
 .studio-activity [class~="bg-gray-200"], .studio-activity [class~="dark:bg-gray-700"] { background: #343b40 !important; }
 
+button:not(:disabled) { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
 input, select { color-scheme: dark; }
 input:focus, select:focus { border-color: var(--studio-cyan) !important; box-shadow: 0 0 0 3px rgba(72,217,232,.14) !important; }
 [x-cloak] { display: none !important; }
