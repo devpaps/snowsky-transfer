@@ -4,7 +4,7 @@ Snowsky Transfer is a Linux desktop application built with Tauri 2 for transferr
 
 The app copies supported audio files as-is. It does not transcode files or improve audio quality.
 
-**Version:** 0.1b
+**Version:** 0.1.2 beta
 
 ## Features
 
@@ -13,7 +13,7 @@ The app copies supported audio files as-is. It does not transcode files or impro
 - Add files through a file picker or drag and drop
 - Transfer supported Echo Mini formats: MP3, FLAC, OGG, WAV, and M4A
 - Saved sync profiles for recurring music transfers
-- Edit metadata including title, artist, album, genre, year, track number, and cover art
+- Edit metadata including title, artist, album, genre, year and track number
 - Preview local audio files
 - Manage and delete tracks on the device
 - Warn when the device is disconnected or powered off
