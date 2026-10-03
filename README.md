@@ -54,18 +54,6 @@ npm run tauri build
 
 The frontend is built into `dist/`. Tauri production bundles are generated under `src-tauri/target/release/bundle/`.
 
-## Udev Rule for Snowsky Echo Mini
-
-This may be required to allow the application to access the device without elevated privileges.
-
-Create `/etc/udev/rules.d/51-snowsky.rules`:
-
-```
-SUBSYSTEM=="usb", ATTR{idVendor}=="XXXX", ATTR{idProduct}=="YYYY", MODE="0664", GROUP="plugdev"
-```
-
-Replace `XXXX:YYYY` with the device VID:PID, which can be found with `lsusb`. Then add your user to the `plugdev` group.
-
 ## Project Structure
 
 ```
