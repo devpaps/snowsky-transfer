@@ -262,7 +262,7 @@
               />
             </svg>
             <p class="text-sm font-medium">Drag and drop audio files here</p>
-            <p class="text-xs">Supported for transfer: MP3 · FLAC · OGG · WAV · M4A · AAC</p>
+            <p class="text-xs">Supported for transfer: MP3 · FLAC · OGG · WAV · M4A</p>
           </div>
 
           <!-- File rows -->
@@ -561,7 +561,6 @@
                 <option value="ogg">OGG</option>
                 <option value="wav">WAV</option>
                 <option value="m4a">M4A</option>
-                <option value="aac">AAC</option>
               </select>
             </div>
             <!-- View mode toggle (mount only) -->
@@ -1525,82 +1524,5 @@
       </div>
     </div>
 
-    <!-- ══════════════════════════════════════════════════════════════
-     MODAL: Format conversion
-═══════════════════════════════════════════════════════════════ -->
-    <div
-      x-show="convertModal"
-      x-cloak
-      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
-      @keydown.escape.window="convertModal = false"
-    >
-      <div
-        @click.stop
-        class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm p-6 border border-gray-200 dark:border-gray-700"
-      >
-        <h2 class="font-semibold text-base mb-1">Format conversion</h2>
-        <p class="text-xs text-gray-500 mb-4">
-          Some files are not MP3 or FLAC. Would you like to convert them with ffmpeg?
-        </p>
-
-        <div class="space-y-3 mb-4">
-          <div class="flex items-center gap-3">
-            <label
-              class="text-xs font-medium text-gray-600 dark:text-gray-400 w-20"
-              >Format</label
-            >
-            <select
-              x-model="convertFmt"
-              class="flex-1 px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-            >
-              <option value="mp3">MP3</option>
-              <option value="flac">FLAC</option>
-              <option value="ogg">OGG</option>
-              <option value="m4a">M4A (AAC)</option>
-              <option value="wav">WAV</option>
-            </select>
-          </div>
-          <div
-            class="flex items-center gap-3"
-            x-show="['mp3','ogg','m4a'].includes(convertFmt)"
-          >
-            <label
-              class="text-xs font-medium text-gray-600 dark:text-gray-400 w-20"
-              >Bitrate</label
-            >
-            <select
-              x-model.number="convertBitrate"
-              class="flex-1 px-2 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
-            >
-              <option value="128">128 kbps</option>
-              <option value="192">192 kbps</option>
-              <option value="256">256 kbps</option>
-              <option value="320">320 kbps</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="flex gap-3 justify-end">
-          <button
-            @click="convertModal = false"
-            class="px-4 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            @click="confirmConvert(false)"
-            class="px-4 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-          >
-            Keep original
-          </button>
-          <button
-            @click="confirmConvert(true)"
-            class="px-4 py-1.5 text-sm rounded-lg bg-violet-600 hover:bg-violet-700 text-white font-medium transition-colors"
-          >
-            Convert
-          </button>
-        </div>
-      </div>
-    </div>
   </body>
 </html>

@@ -110,7 +110,7 @@ pub struct FolderContents {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const AUDIO_EXTS: &[&str] = &["mp3", "flac", "ogg", "wav", "m4a", "aac"];
+const AUDIO_EXTS: &[&str] = &["mp3", "flac", "ogg", "wav", "m4a"];
 
 // ─── Public API ──────────────────────────────────────────────────────────────
 

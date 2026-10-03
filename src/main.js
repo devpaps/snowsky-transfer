@@ -67,7 +67,7 @@ function sanitizeGenre(genre) {
   return cleaned || UNKNOWN_GENRE;
 }
 
-const AUDIO_EXTS = new Set(["mp3", "flac", "ogg", "wav", "m4a", "aac"]);
+const AUDIO_EXTS = new Set(["mp3", "flac", "ogg", "wav", "m4a"]);
 const SYNC_PROFILES_KEY = "snowsky-transfer-sync-profiles";
 const GENRE_FOLDER_ROOT = "Genres";
 const UNKNOWN_GENRE = "Unknown genre";
@@ -150,13 +150,6 @@ Alpine.data("app", () => ({
   metaForm: {},
   metaSaving: false,
 
-  // ── Conversion modal
-  convertModal: false,
-  pendingFiles: [], // files awaiting conversion decision
-  convertFmt: "mp3",
-  convertBitrate: 192,
-  ffmpegAvailable: true,
-
   // ── Drag
   isDragging: false,
 
@@ -217,9 +210,6 @@ Alpine.data("app", () => ({
         this.addFilePaths(paths);
       }
     });
-
-    // Check ffmpeg
-    this.ffmpegAvailable = await invoke("ffmpeg_available");
 
     // Lazy-load cover art for search results as rows scroll into view.
     this.coverObserver = new IntersectionObserver(
@@ -668,7 +658,7 @@ Alpine.data("app", () => ({
       filters: [
         {
           name: "Audio",
-          extensions: ["mp3", "flac", "ogg", "wav", "m4a", "aac"],
+          extensions: ["mp3", "flac", "ogg", "wav", "m4a"],
         },
       ],
     });
@@ -1213,14 +1203,6 @@ Alpine.data("app", () => ({
     // Preserve the order chosen in the local file queue.
     const ordered = [...files];
 
-    // If ffmpeg available, ask about conversion (skip MP3 and FLAC)
-    const needsConvert = files.some((f) => f.ext !== "mp3" && f.ext !== "flac");
-    if (this.ffmpegAvailable && needsConvert) {
-      this.pendingFiles = ordered;
-      this.convertModal = true;
-      return;
-    }
-
     // If using a mount device, copy files directly
     if (this.selectedMount) {
       await this.doMountTransfer(ordered, destinationOverride, refreshOverride);
@@ -1232,75 +1214,6 @@ Alpine.data("app", () => ({
     await this.doTransfer(
       ordered.map((f, i) => this.buildSendRequest(f, null, i + 1)),
     );
-  },
-
-  async confirmConvert(convert) {
-    this.convertModal = false;
-    const requests = this.pendingFiles.map((f) => {
-      if (convert && f.ext !== "mp3" && f.ext !== "flac") {
-        return {
-          file: f,
-          convertTo: this.convertFmt,
-          bitrate: this.convertBitrate,
-        };
-      }
-      return { file: f, convertTo: null };
-    });
-    this.pendingFiles = [];
-
-    // Convert files that need it first
-    const sendRequests = [];
-    const mountFiles = [];
-    for (const [index, r] of requests.entries()) {
-      if (r.convertTo) {
-        try {
-          const outPath = await invoke("convert_audio", {
-            req: {
-              input_path: r.file.path,
-              output_fmt: r.convertTo,
-              bitrate_kbps: r.bitrate,
-            },
-          });
-          if (this.selectedMount) {
-            mountFiles.push({
-              ...r.file,
-              originalPath: r.file.path,
-              path: outPath,
-            });
-          } else {
-            sendRequests.push(
-              this.buildSendRequest(r.file, outPath, index + 1),
-            );
-          }
-        } catch (e) {
-          console.error("convert_audio error:", e);
-          if (this.selectedMount) {
-            mountFiles.push(r.file);
-          } else {
-            sendRequests.push(this.buildSendRequest(r.file, null, index + 1));
-          }
-        }
-      } else {
-        if (this.selectedMount) {
-          mountFiles.push(r.file);
-        } else {
-          sendRequests.push(this.buildSendRequest(r.file, null, index + 1));
-        }
-      }
-    }
-
-    if (this.selectedMount) {
-      await this.doMountTransfer(
-        mountFiles,
-        this.pendingTransferDestination,
-        this.pendingTransferRefreshPath,
-      );
-      this.pendingTransferDestination = null;
-      this.pendingTransferRefreshPath = null;
-      this.pendingTransferDestination = null;
-    } else {
-      await this.doTransfer(sendRequests);
-    }
   },
 
   buildSendRequest(file, convertedPath, orderNumber = 1) {
