@@ -112,6 +112,8 @@ Alpine.data("app", () => ({
   localFiles: [], // Array<{ path, name, ext, size, meta | null, metadataError | null }>
   selectedLocal: new Set(),
   fileImportNotice: null,
+  lastImportPathsKey: null,
+  lastImportAt: 0,
   draggedLocalPath: null,
   dragOverLocalPath: null,
   pointerDraggingLocal: false,
@@ -125,6 +127,10 @@ Alpine.data("app", () => ({
   cancelTransferRequested: false,
   transferNotice: null,
   transferCloseTimer: null,
+  transferConfirmModal: false,
+  transferConfirmDestination: null,
+  transferConfirmRefreshPath: null,
+  transferConfirmAction: "transfer",
   connectionMonitor: null,
   connectionLost: false,
   syncSummary: null,
@@ -843,7 +849,13 @@ Alpine.data("app", () => ({
     this.persistSyncProfiles();
   },
 
-  async syncSavedProfile() {
+  syncSavedProfile() {
+    if (!this.selectedMount || !this.selectedLocal.size || this.isTransferring)
+      return;
+    this.confirmStartTransfer("", this.folderPath, "sync");
+  },
+
+  async syncSavedProfileConfirmed() {
     if (!this.selectedMount || !this.selectedLocal.size || this.isTransferring)
       return;
     const currentFolder = this.folderPath;
@@ -874,9 +886,11 @@ Alpine.data("app", () => ({
     // Resolve each path: single audio file or entire directory tree
     const resolved = []; // { path, subPath }
     const skipped = [];
-    let duplicateCount = 0;
+    let alreadyQueuedCount = 0;
     let emptyCount = 0;
     let addedCount = 0;
+    const alreadyQueuedPaths = [];
+    const addedPaths = [];
 
     for (const p of paths) {
       const files = await invoke("expand_audio_path", { path: p });
@@ -907,7 +921,8 @@ Alpine.data("app", () => ({
       }
       const name = path.split("/").pop();
       if (this.localFiles.some((f) => f.path === path)) {
-        duplicateCount++;
+        alreadyQueuedCount++;
+        alreadyQueuedPaths.push(path);
         continue;
       }
 
@@ -922,6 +937,7 @@ Alpine.data("app", () => ({
         loading: true,
       });
       addedCount++;
+      addedPaths.push(path);
 
       invoke("get_local_metadata", { path })
         .then((meta) => {
@@ -947,11 +963,44 @@ Alpine.data("app", () => ({
         .catch(() => {});
     }
 
+    const importPathsKey = resolved
+      .map((item) => item.path)
+      .sort()
+      .join("\n");
+    const now = Date.now();
+    const isImmediateRepeat =
+      importPathsKey &&
+      importPathsKey === this.lastImportPathsKey &&
+      now - this.lastImportAt < 1500;
+    if (
+      isImmediateRepeat &&
+      addedCount === 0 &&
+      skipped.length === 0 &&
+      emptyCount === 0 &&
+      alreadyQueuedCount === alreadyQueuedPaths.length
+    ) {
+      return;
+    }
+
+    if (addedPaths.length) {
+      this.lastImportPathsKey = importPathsKey;
+      this.lastImportAt = now;
+    }
+
     const parts = [];
     if (addedCount)
       parts.push(`${addedCount} ${addedCount === 1 ? "file" : "files"} added`);
-    if (duplicateCount)
-      parts.push(`${duplicateCount} duplicate ${duplicateCount === 1 ? "file" : "files"} ignored`);
+    if (alreadyQueuedCount) {
+      if (!addedCount && !skipped.length && !emptyCount) {
+        parts.push(
+          `No new files added. ${alreadyQueuedCount} ${alreadyQueuedCount === 1 ? "file is" : "files are"} already in the local list`,
+        );
+      } else {
+        parts.push(
+          `${alreadyQueuedCount} ${alreadyQueuedCount === 1 ? "file" : "files"} already in the local list`,
+        );
+      }
+    }
     if (skipped.length)
       parts.push(`${skipped.length} unsupported ${skipped.length === 1 ? "file" : "files"} skipped`);
     if (emptyCount)
@@ -1204,9 +1253,51 @@ Alpine.data("app", () => ({
   },
 
   // ─── Transfer ────────────────────────────────────────────────────────────
+  confirmStartTransfer(
+    destinationOverride = null,
+    refreshOverride = null,
+    action = "transfer",
+  ) {
+    if (!this.selectedLocal.size) return;
+    if (!this.device && !this.selectedMount) return;
+    this.fileImportNotice = null;
+    this.transferConfirmDestination = destinationOverride;
+    this.transferConfirmRefreshPath = refreshOverride;
+    this.transferConfirmAction = action;
+    this.transferConfirmModal = true;
+  },
+
+  async startConfirmedTransfer() {
+    const destination = this.transferConfirmDestination;
+    const refreshPath = this.transferConfirmRefreshPath;
+    const action = this.transferConfirmAction;
+    this.transferConfirmModal = false;
+    this.transferConfirmDestination = null;
+    this.transferConfirmRefreshPath = null;
+    this.transferConfirmAction = "transfer";
+    if (action === "sync") await this.syncSavedProfileConfirmed();
+    else await this.startTransfer(destination, refreshPath);
+  },
+
+  get transferSummaryDestination() {
+    if (!this.selectedMount) return "MTP music library";
+    const destination =
+      this.transferConfirmDestination !== null
+        ? this.transferConfirmDestination
+        : this.transferDestination ||
+          (this.viewMode === "folder" ? this.folderPath : "");
+    return destination || "Device root";
+  },
+
+  get transferSummaryRemainingBytes() {
+    if (!this.selectedMountDisk || this.selectedLocalSizesLoading) return null;
+    return Number(this.selectedMountDisk.free_bytes) - this.selectedLocalBytes;
+  },
+
   async startTransfer(destinationOverride = null, refreshOverride = null) {
     if (!this.selectedLocal.size) return;
     if (!this.device && !this.selectedMount) return;
+    this.fileImportNotice = null;
 
     const files = this.selectedLocalFiles;
     this.pendingTransferDestination = destinationOverride;
@@ -1449,10 +1540,10 @@ Alpine.data("app", () => ({
     const cancelled = this.cancelTransferRequested;
 
     this.transferNotice = cancelled
-      ? `Transfer cancelled (${done} completed)`
+      ? `Transfer cancelled: ${done} completed${errors ? `, ${errors} failed` : ""}`
       : errors
-        ? `Transfer failed for ${failed.map((t) => `${t.filename}: ${t.error || "unknown error"}`).join(" | ")}`
-        : `${done} ${done === 1 ? "file" : "files"} transferred successfully`;
+        ? `Transfer complete: ${done} completed, ${errors} failed`
+        : `Transfer complete: ${done} ${done === 1 ? "file" : "files"} transferred`;
 
     this.transferCloseTimer = setTimeout(() => {
       if (!this.isTransferring) {

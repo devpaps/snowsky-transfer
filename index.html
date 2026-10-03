@@ -513,7 +513,7 @@
             Rescan
           </button>
           <button
-            @click="activeSyncProfileId ? syncSavedProfile() : startTransfer()"
+            @click="activeSyncProfileId ? syncSavedProfile() : confirmStartTransfer()"
             :disabled="(!device && !selectedMount) || isTransferring || (selectedMount && (selectedLocalSizesLoading || selectedLocalCapacityUnknown || selectedLocalOverCapacity))"
             class="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-semibold bg-violet-600 hover:bg-violet-700 text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
@@ -1358,6 +1358,84 @@
         >
           ×
         </button>
+      </div>
+    </div>
+
+    <!-- Modal: Transfer confirmation -->
+    <div
+      x-show="transferConfirmModal"
+      x-cloak
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      @keydown.escape.window="transferConfirmModal = false"
+    >
+      <div
+        @click.stop
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="transfer-confirm-title"
+        class="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-md p-6 border border-gray-200 dark:border-gray-700"
+      >
+        <h2 id="transfer-confirm-title" class="font-semibold text-base mb-1">
+          Confirm transfer
+        </h2>
+        <p class="text-xs text-gray-500 mb-5">
+          Review what will be copied before starting.
+        </p>
+
+        <div class="space-y-2 text-sm">
+          <div class="flex justify-between gap-4">
+            <span class="text-gray-500">Files</span>
+            <span class="font-medium" x-text="selectedLocal.size"></span>
+          </div>
+          <div class="flex justify-between gap-4">
+            <span class="text-gray-500">Total size</span>
+            <span class="font-medium" x-text="fmtBytes(selectedLocalBytes)"></span>
+          </div>
+          <div class="flex justify-between gap-4">
+            <span class="text-gray-500">Destination</span>
+            <span class="font-medium text-right truncate" x-text="transferSummaryDestination"></span>
+          </div>
+          <div x-show="selectedMount" class="flex justify-between gap-4">
+            <span class="text-gray-500">Genre folders</span>
+            <span class="font-medium" x-text="createGenreFolders ? 'On' : 'Off'"></span>
+          </div>
+          <div
+            x-show="selectedMount && transferSummaryRemainingBytes !== null"
+            class="flex justify-between gap-4"
+          >
+            <span class="text-gray-500">After transfer</span>
+            <span
+              class="font-medium"
+              :class="transferSummaryRemainingBytes < 0 ? 'text-red-400' : 'text-green-400'"
+              x-text="`${fmtBytes(Math.abs(transferSummaryRemainingBytes))} ${transferSummaryRemainingBytes < 0 ? 'over capacity' : 'free'}`"
+            ></span>
+          </div>
+        </div>
+
+        <div class="mt-4 rounded-xl bg-cyan-950/20 border border-cyan-900/50 px-3 py-2 text-xs text-cyan-100">
+          Files are copied as-is. No conversion or quality changes.
+        </div>
+        <div
+          x-show="transferConfirmAction === 'sync'"
+          class="mt-2 rounded-xl bg-amber-950/20 border border-amber-900/60 px-3 py-2 text-xs text-amber-200"
+        >
+          Sync replaces matching files on the device before copying selected files.
+        </div>
+
+        <div class="flex gap-3 mt-5 justify-end">
+          <button
+            @click="transferConfirmModal = false"
+            class="px-4 py-1.5 text-sm rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            @click="startConfirmedTransfer()"
+            class="px-4 py-1.5 text-sm rounded-lg bg-violet-600 hover:bg-violet-700 text-white font-medium transition-colors"
+          >
+            Start transfer
+          </button>
+        </div>
       </div>
     </div>
 
