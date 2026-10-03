@@ -1369,11 +1369,6 @@ Alpine.data("app", () => ({
           this.transfers[id].error = e.toString();
         }
       }
-      if (file.originalPath && file.path !== file.originalPath) {
-        await invoke("cleanup_temp_file", { path: file.path }).catch((error) =>
-          console.error("cleanup_temp_file error:", error),
-        );
-      }
     }
 
     // A disconnected mount is cleared by the connection monitor.

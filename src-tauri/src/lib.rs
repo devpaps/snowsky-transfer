@@ -1,14 +1,13 @@
 //! Tauri application entry-point and all IPC commands.
 
 mod audio;
-mod converter;
 mod error;
 mod fs;
 mod metadata;
 mod mtp;
 
 use std::sync::{Arc, Mutex};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use tauri::Emitter;
 use error::AppError;
 
@@ -17,8 +16,6 @@ use error::AppError;
 pub struct AppState {
     pub mtp:   Arc<Mutex<mtp::MtpManager>>,
     pub audio: Arc<Mutex<audio::AudioPlayer>>,
-    /// Temp files created during conversion; cleaned up on exit.
-    pub temp_files: Arc<Mutex<Vec<String>>>,
     pub mount_search_cache: Arc<Mutex<HashMap<String, Vec<fs::IndexedTrack>>>>,
 }
 
@@ -70,7 +67,6 @@ async fn send_tracks(
     tracks:  Vec<mtp::SendTrackRequest>,
 ) -> Result<Vec<u32>, AppError> {
     let mtp        = Arc::clone(&state.mtp);
-    let temp_files = Arc::clone(&state.temp_files);
     let app_arc    = Arc::new(app);
 
     tauri::async_runtime::spawn_blocking(move || {
@@ -105,15 +101,6 @@ async fn send_tracks(
                     }));
                 }
             }
-        }
-
-        // Clean up only the temp conversion files used by this transfer.
-        // Other entries belong to unrelated conversions (e.g. mount transfers).
-        let used: HashSet<&String> = tracks.iter().map(|req| &req.path).collect();
-        let mut tf = temp_files.lock().unwrap();
-        tf.retain(|path| !used.contains(path));
-        for path in used {
-            let _ = std::fs::remove_file(path);
         }
 
         Ok(new_ids)
@@ -183,46 +170,6 @@ async fn preview_track(
 async fn stop_preview(state: tauri::State<'_, AppState>) -> Result<(), AppError> {
     state.audio.lock().unwrap().stop();
     Ok(())
-}
-
-/// Convert an audio file and return the path to the converted temp file.
-/// The file is cleaned up automatically after the next send_tracks call.
-#[tauri::command]
-async fn convert_audio(
-    state: tauri::State<'_, AppState>,
-    req:   converter::ConvertRequest,
-) -> Result<String, AppError> {
-    let temp_files = Arc::clone(&state.temp_files);
-    tauri::async_runtime::spawn_blocking(move || {
-        let out = converter::convert(&req)?;
-        temp_files.lock().unwrap().push(out.clone());
-        Ok(out)
-    })
-    .await
-    .map_err(|e| AppError::Task(e.to_string()))?
-}
-
-/// Remove a temporary conversion file after a mounted-device transfer.
-#[tauri::command]
-async fn cleanup_temp_file(
-    state: tauri::State<'_, AppState>,
-    path: String,
-) -> Result<(), AppError> {
-    let temp_files = Arc::clone(&state.temp_files);
-    tauri::async_runtime::spawn_blocking(move || {
-        let mut files = temp_files.lock().unwrap();
-        files.retain(|known| known != &path);
-        let _ = std::fs::remove_file(path);
-        Ok(())
-    })
-    .await
-    .map_err(|e| AppError::Task(e.to_string()))?
-}
-
-/// Return whether ffmpeg is available on PATH.
-#[tauri::command]
-async fn ffmpeg_available() -> bool {
-    converter::ffmpeg_available()
 }
 
 // ─── Filesystem (mass-storage) device commands ───────────────────────────────
@@ -388,7 +335,6 @@ pub fn run() {
         .manage(AppState {
             mtp:        Arc::new(Mutex::new(mtp::MtpManager::new())),
             audio:      Arc::new(Mutex::new(audio::AudioPlayer::new())),
-            temp_files: Arc::new(Mutex::new(Vec::new())),
             mount_search_cache: Arc::new(Mutex::new(HashMap::new())),
         })
         .invoke_handler(tauri::generate_handler![
@@ -404,9 +350,6 @@ pub fn run() {
             update_local_metadata,
             preview_track,
             stop_preview,
-            convert_audio,
-            cleanup_temp_file,
-            ffmpeg_available,
             detect_mounts,
             scan_mount_device,
             mount_device_present,

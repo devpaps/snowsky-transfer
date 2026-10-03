@@ -1,6 +1,8 @@
 # Snowsky Transfer
 
-Snowsky Transfer is a Linux desktop application built with Tauri 2 for transferring music to the **Snowsky Echo Mini** over USB/MTP.
+Snowsky Transfer is a Linux desktop application built with Tauri 2 for transferring music to the **Snowsky Echo Mini** over USB/MTP or mounted USB storage.
+
+The app copies supported audio files as-is. It does not transcode files or improve audio quality.
 
 **Version:** 0.1b
 
@@ -9,8 +11,8 @@ Snowsky Transfer is a Linux desktop application built with Tauri 2 for transferr
 - Connect directly to a device through libmtp without an additional daemon
 - Support for mounted USB storage devices
 - Add files through a file picker or drag and drop
+- Transfer supported Echo Mini formats: MP3, FLAC, OGG, WAV, and M4A
 - Saved sync profiles for recurring music transfers
-- Automatic format conversion with ffmpeg, confirmed per transfer
 - Edit metadata including title, artist, album, genre, year, track number, and cover art
 - Preview local audio files
 - Manage and delete tracks on the device
@@ -22,7 +24,7 @@ Snowsky Transfer is a Linux desktop application built with Tauri 2 for transferr
 
 ```bash
 # Fedora/RHEL
-sudo dnf install libmtp libmtp-devel ffmpeg
+sudo dnf install libmtp libmtp-devel
 
 # Rust + Node
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -72,7 +74,6 @@ snowsky-transfer/
 │   ├── lib.rs        - Tauri commands (IPC)
 │   ├── mtp.rs        - libmtp FFI and safe wrapper
 │   ├── metadata.rs   - Read/write ID3 and FLAC tags (lofty)
-│   ├── converter.rs  - Format conversion (ffmpeg CLI)
 │   ├── audio.rs      - Audio preview (rodio)
 │   └── error.rs      - Error types
 └── src/

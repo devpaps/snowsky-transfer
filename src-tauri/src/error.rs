@@ -8,9 +8,6 @@ pub enum AppError {
     #[error("Metadata error: {0}")]
     Metadata(String),
 
-    #[error("Converter error: {0}")]
-    Converter(String),
-
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 
