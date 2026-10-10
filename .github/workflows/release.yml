@@ -25,6 +25,7 @@ jobs:
             patchelf \
             xdg-utils \
             libmtp-dev \
+            libasound2-dev \
             rpm \
             libfuse2
 
